@@ -9,7 +9,7 @@
 class EspNowEz {
 public:
 	struct Config {
-		uint8_t channel = 0;
+		uint8_t channel = 7;
 		bool is_gateway = false;
 		char* name = nullptr;
 		uint8_t* pmk = nullptr;
@@ -19,8 +19,8 @@ public:
 	const char* TAG = "espnow";
    const uint8_t BROADCAST_MAC[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-   void init(Config* config);
-	void pair(uint16_t time_ms);
+   void init(Config* config = nullptr);
+	void startPair(uint16_t time_ms = 0);
    void sendDiscovery(const uint8_t* dst_mac = nullptr);
 	~EspNowEz();
 

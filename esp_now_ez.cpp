@@ -3,6 +3,9 @@
 EspNowEz* EspNowEz::instance;
 
 void EspNowEz::init(Config* config) {
+	if (config == nullptr) {
+		config = new Config;
+	}
 	this->config = config;
 	ESP_ERROR_CHECK(nvs_flash_init());
 	ESP_ERROR_CHECK(esp_netif_init());
@@ -72,11 +75,14 @@ void EspNowEz::init(Config* config) {
 	ESP_LOGI(TAG, "Initialized");
 }
 
-void EspNowEz::pair(uint16_t time_ms) {
+void EspNowEz::startPair(uint16_t time_ms) {
 	ESP_LOGI(TAG, "Start pair");
 	this->is_pair = true;
 	if (this->config->is_gateway) {
 		this->sendDiscovery();
+	}
+	if (time_ms == 0) {
+		return;
 	}
 	vTaskDelay(time_ms / portTICK_PERIOD_MS);
 	ESP_LOGI(TAG, "Stop pair");
@@ -136,7 +142,8 @@ void EspNowEz::onMessageSent(const uint8_t *mac_addr, esp_now_send_status_t stat
 }
 
 EspNowEz::~EspNowEz() {
-	delete config->name;
-	delete[] config->pmk;
-	delete[] config->lmk;
+	delete this->config->name;
+	delete[] this->config->pmk;
+	delete[] this->config->lmk;
+	delete this->config;
 }
