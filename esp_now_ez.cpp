@@ -113,8 +113,9 @@ void EspNowEz::sendMessage(const Payload* payload, const uint8_t* mac) {
 	if (mac == nullptr) {
 		mac = this->BROADCAST_MAC;
 	}
-	ESP_ERROR_CHECK(esp_now_send(mac, (const uint8_t*) payload, payload->size()));
-	ESP_LOGD(TAG, "Message sent to %02x:%02x:%02x:%02x:%02x:%02x",	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	uint8_t size = payload->size();
+	ESP_ERROR_CHECK(esp_now_send(mac, (const uint8_t*) payload, size));
+	ESP_LOGD(TAG, "Sent %uB to %02x:%02x:%02x:%02x:%02x:%02x", size, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 void EspNowEz::addPeer(const uint8_t* mac, const uint8_t* lmk) {
@@ -156,12 +157,9 @@ std::vector<esp_now_peer_info_t> EspNowEz::getPeers() {
 
 void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
 	if (esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
-		ESP_LOGD(TAG, "Received message");
 		uint8_t* s = recv_info->src_addr;
-		uint8_t* d = recv_info->des_addr;
-		ESP_LOGD(TAG, "%02x:%02x:%02x:%02x:%02x:%02x -> %02x:%02x:%02x:%02x:%02x:%02x", 
-			s[0], s[1], s[2], s[3], s[4], s[5], d[0], d[1], d[2], d[3], d[4], d[5]);
-		ESP_LOGD(TAG, "len: %d", len);
+		const char* b = memcmp(recv_info->des_addr, BROADCAST_MAC, sizeof(BROADCAST_MAC)) == 0 ? " (Broadcast)" : "";
+		ESP_LOGD(TAG, "Received %dB from %02x:%02x:%02x:%02x:%02x:%02x%s", len, s[0], s[1], s[2], s[3], s[4], s[5], b);
 	}
 
 	const Payload* payload = reinterpret_cast<const Payload*>(data);
@@ -177,7 +175,7 @@ void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uin
 			this->addPeer(mac);
 			this->sendDiscovery(mac);
 			this->installPmk(discovery->pmk);
-			this->modifyPeer(mac, discovery->lmk);
+			this->modifyPeer(mac, config->lmk);
 		}
 
 		this->stopPair();
