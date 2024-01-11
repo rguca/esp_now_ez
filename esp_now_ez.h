@@ -10,18 +10,21 @@ class EspNowEz {
 public:
 	struct Config {
 		uint8_t channel = 7;
-		bool is_gateway = false;
+		bool is_master = false;
 		char* name = nullptr;
 		uint8_t* pmk = nullptr;
 		uint8_t* lmk = nullptr;
 	};
 
-	const char* TAG = "espnow";
+	const char* TAG = "espnowez";
    const uint8_t BROADCAST_MAC[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
    void init(Config* config = nullptr);
 	void startPair(uint16_t time_ms = 0);
+	void stopPair();
    void sendDiscovery(const uint8_t* dst_mac = nullptr);
+	void addPeer(const uint8_t* mac, bool encrypt = false);
+	void installPeerLmk(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	~EspNowEz();
 
 protected:
@@ -57,13 +60,13 @@ protected:
 		} body;
 	};
 	#pragma pack(pop)
-
 	// uint8_t (*__kaboom)[sizeof( Payload )] = 1; // check if size is 250
 
 	static EspNowEz* instance;
 	Config* config;
-	bool is_pair;
+	bool is_pair = false;
 
+	void installPmk(const uint8_t* pmk = nullptr);
 	void onMessageReceived(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len);
 	void onMessageSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 };

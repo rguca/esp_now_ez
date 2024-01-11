@@ -18,7 +18,7 @@ void EspNowEz::init(Config* config) {
 	ESP_ERROR_CHECK(esp_wifi_set_channel(config->channel, WIFI_SECOND_CHAN_NONE));
 
 	// Enable long range
-	ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N));
+	ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR));
 
 	ESP_ERROR_CHECK(esp_now_init());
 	this->instance = this;
@@ -29,13 +29,8 @@ void EspNowEz::init(Config* config) {
 		EspNowEz::instance->onMessageSent(mac_addr, status);
 	}));
 
-	// Init broadcast "peer"
-	esp_now_peer_info_t peer;
-	peer.ifidx = WIFI_IF_STA;
-	peer.channel = config->channel;
-	peer.encrypt = false;
-	std::memcpy(peer.peer_addr, this->BROADCAST_MAC, ESP_NOW_ETH_ALEN);
-	ESP_ERROR_CHECK(esp_now_add_peer(&peer));
+	// Add broadcast "peer"
+	this->addPeer(this->BROADCAST_MAC);
 
 	// Generate keys
 	uint8_t chip_id[6];
@@ -59,11 +54,12 @@ void EspNowEz::init(Config* config) {
 			}
 		}
 	}
+	this->installPmk();
 
 	if (config->name == nullptr) {
 		config->name = new char[sizeof(Payload::Discovery::name)];
 		const char* prefix;
-		if (config->is_gateway) {
+		if (config->is_master) {
 			prefix = "Gateway";
 		} else {
 			prefix = "Device";
@@ -76,15 +72,22 @@ void EspNowEz::init(Config* config) {
 }
 
 void EspNowEz::startPair(uint16_t time_ms) {
+	if (this->is_pair) {
+		return;
+	}
 	ESP_LOGI(TAG, "Start pair");
 	this->is_pair = true;
-	if (this->config->is_gateway) {
+	if (this->config->is_master) {
 		this->sendDiscovery();
 	}
 	if (time_ms == 0) {
 		return;
 	}
 	vTaskDelay(time_ms / portTICK_PERIOD_MS);
+	this->stopPair();
+}
+
+void EspNowEz::stopPair() {
 	ESP_LOGI(TAG, "Stop pair");
 	this->is_pair = false;
 }
@@ -108,31 +111,71 @@ void EspNowEz::sendDiscovery(const uint8_t* dst_mac) {
 	ESP_LOGI(TAG, "Discovery sent");
 }
 
+void EspNowEz::addPeer(const uint8_t* mac, bool encrypt) {
+	esp_now_peer_info_t peer;
+	peer.ifidx = WIFI_IF_STA;
+	peer.channel = config->channel;
+	peer.encrypt = encrypt;
+	std::memcpy(peer.peer_addr, mac, ESP_NOW_ETH_ALEN);
+	ESP_ERROR_CHECK(esp_now_add_peer(&peer));
+}
+
+void EspNowEz::installPmk(const uint8_t* pmk) {
+	if (pmk != nullptr) {
+		std::memcpy(this->config->pmk, pmk, sizeof(Payload::Discovery::pmk));
+	}
+	ESP_ERROR_CHECK(esp_now_set_pmk(this->config->pmk));
+	if (esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
+		uint8_t* k = this->config->pmk;
+		ESP_LOGD(TAG, "set pmk: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", 
+			k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15]);
+	}
+}
+
+void EspNowEz::installPeerLmk(const uint8_t* mac, const uint8_t* lmk) {
+	esp_now_peer_info_t peer;
+	ESP_ERROR_CHECK(esp_now_get_peer(mac, &peer));
+	peer.encrypt = lmk != nullptr;
+	if (lmk != nullptr) {
+		std::memcpy(peer.lmk, lmk, sizeof(ESP_NOW_KEY_LEN));
+	}
+	ESP_ERROR_CHECK(esp_now_mod_peer(&peer));
+	if (lmk != nullptr && esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
+		const uint8_t* k = lmk;
+		ESP_LOGD(TAG, "set peer lmk: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", 
+			k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15]);
+	}
+}
+
 void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
-	uint8_t* a = recv_info->src_addr;
-	ESP_LOGI(TAG, "src: %02x:%02x:%02x:%02x:%02x:%02x", a[0], a[1], a[2], a[3], a[4], a[5]);
-	a = recv_info->des_addr;
-	ESP_LOGI(TAG, "dst: %02x:%02x:%02x:%02x:%02x:%02x", a[0], a[1], a[2], a[3], a[4], a[5]);
-	ESP_LOGI(TAG, "len: %d", len);
+	if (esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
+		uint8_t* mac = recv_info->src_addr;
+		ESP_LOGD(TAG, "src: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		mac = recv_info->des_addr;
+		ESP_LOGD(TAG, "dst: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		ESP_LOGD(TAG, "len: %d", len);
+	}
 
 	const Payload* payload = reinterpret_cast<const Payload*>(data);
-	ESP_LOGI(TAG, "type: %u", payload->type);
+
 	if (payload->type == Payload::Type::DISCOVERY) {
-		ESP_LOGI(TAG, "name: %s", payload->body.discovery.name);
+		ESP_LOGI(TAG, "Discovery name: %s", payload->body.discovery.name);
 
 		if (this->is_pair) {
 			const Payload::Discovery* discovery = &payload->body.discovery;
-			std::memcpy(this->config->pmk, discovery->pmk, sizeof(discovery->pmk));
+			uint8_t* mac = recv_info->src_addr;
 
-			// add peer
-			esp_now_peer_info_t peer;
-			peer.ifidx = WIFI_IF_STA;
-			peer.channel = config->channel;
-			peer.encrypt = false;
-			std::memcpy(peer.peer_addr, recv_info->src_addr, ESP_NOW_ETH_ALEN);
-			ESP_ERROR_CHECK(esp_now_add_peer(&peer));
+			if (this->config->is_master) {
+				this->installPeerLmk(mac, discovery->lmk);
+			} else {
+				this->addPeer(mac);
+				this->sendDiscovery(mac);
+				this->installPmk(discovery->pmk);
+				this->installPeerLmk(mac, discovery->lmk);
+			}
 
-			this->sendDiscovery(recv_info->src_addr);
+			ESP_LOGI(TAG, "paired %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+			this->stopPair();
 		}
 	}
 }
