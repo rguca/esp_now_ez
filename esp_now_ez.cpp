@@ -55,6 +55,7 @@ void EspNowEz::init(Config* config) {
 		}
 	}
 	this->installPmk();
+	this->logKey("lmk", this->config->lmk);
 
 	if (config->name == nullptr) {
 		config->name = new char[sizeof(Payload::Discovery::name)];
@@ -88,6 +89,9 @@ void EspNowEz::startPair(uint16_t time_ms) {
 }
 
 void EspNowEz::stopPair() {
+	if (!this->is_pair) {
+		return;
+	}
 	ESP_LOGI(TAG, "Stop pair");
 	this->is_pair = false;
 }
@@ -111,12 +115,17 @@ void EspNowEz::sendDiscovery(const uint8_t* dst_mac) {
 	ESP_LOGI(TAG, "Discovery sent");
 }
 
-void EspNowEz::addPeer(const uint8_t* mac, bool encrypt) {
+void EspNowEz::addPeer(const uint8_t* mac, const uint8_t* lmk) {
 	esp_now_peer_info_t peer;
 	peer.ifidx = WIFI_IF_STA;
 	peer.channel = config->channel;
-	peer.encrypt = encrypt;
 	std::memcpy(peer.peer_addr, mac, ESP_NOW_ETH_ALEN);
+	ESP_LOGI(TAG, "Add peer: %02x:%02x:%02x:%02x:%02x:%02x",	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	peer.encrypt = lmk != nullptr;
+	if (lmk != nullptr) {
+		std::memcpy(peer.lmk, lmk, sizeof(ESP_NOW_KEY_LEN));
+		this->logKey("lmk", lmk);
+	}
 	ESP_ERROR_CHECK(esp_now_add_peer(&peer));
 }
 
@@ -124,12 +133,8 @@ void EspNowEz::installPmk(const uint8_t* pmk) {
 	if (pmk != nullptr) {
 		std::memcpy(this->config->pmk, pmk, sizeof(Payload::Discovery::pmk));
 	}
+	this->logKey("pmk", this->config->pmk);
 	ESP_ERROR_CHECK(esp_now_set_pmk(this->config->pmk));
-	if (esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
-		uint8_t* k = this->config->pmk;
-		ESP_LOGD(TAG, "set pmk: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", 
-			k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15]);
-	}
 }
 
 void EspNowEz::installPeerLmk(const uint8_t* mac, const uint8_t* lmk) {
@@ -138,35 +143,32 @@ void EspNowEz::installPeerLmk(const uint8_t* mac, const uint8_t* lmk) {
 	peer.encrypt = lmk != nullptr;
 	if (lmk != nullptr) {
 		std::memcpy(peer.lmk, lmk, sizeof(ESP_NOW_KEY_LEN));
+		this->logKey("lmk", lmk);
 	}
 	ESP_ERROR_CHECK(esp_now_mod_peer(&peer));
-	if (lmk != nullptr && esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
-		const uint8_t* k = lmk;
-		ESP_LOGD(TAG, "set peer lmk: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", 
-			k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15]);
-	}
 }
 
 void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
 	if (esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
-		uint8_t* mac = recv_info->src_addr;
-		ESP_LOGD(TAG, "src: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-		mac = recv_info->des_addr;
-		ESP_LOGD(TAG, "dst: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		ESP_LOGD(TAG, "Received message");
+		uint8_t* s = recv_info->src_addr;
+		uint8_t* d = recv_info->des_addr;
+		ESP_LOGD(TAG, "%02x:%02x:%02x:%02x:%02x:%02x -> %02x:%02x:%02x:%02x:%02x:%02x", 
+			s[0], s[1], s[2], s[3], s[4], s[5], d[0], d[1], d[2], d[3], d[4], d[5]);
 		ESP_LOGD(TAG, "len: %d", len);
 	}
 
 	const Payload* payload = reinterpret_cast<const Payload*>(data);
 
 	if (payload->type == Payload::Type::DISCOVERY) {
-		ESP_LOGI(TAG, "Discovery name: %s", payload->body.discovery.name);
+		ESP_LOGI(TAG, "Discovery received: %s", payload->body.discovery.name);
 
 		if (this->is_pair) {
 			const Payload::Discovery* discovery = &payload->body.discovery;
 			uint8_t* mac = recv_info->src_addr;
 
 			if (this->config->is_master) {
-				this->installPeerLmk(mac, discovery->lmk);
+				this->addPeer(mac, discovery->lmk);
 			} else {
 				this->addPeer(mac);
 				this->sendDiscovery(mac);
@@ -182,6 +184,15 @@ void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uin
 
 void EspNowEz::onMessageSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 	ESP_LOGI(TAG, "Delivery status: %s", status == ESP_NOW_SEND_SUCCESS ? "OK" : "NOK");
+}
+
+void EspNowEz::logKey(const char* name, const uint8_t* key) {
+	if (esp_log_level_get(TAG) < ESP_LOG_DEBUG) {
+		return;
+	}
+	const uint8_t* k = key;
+	ESP_LOGD(TAG, "%s=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", 
+			name, k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15]);
 }
 
 EspNowEz::~EspNowEz() {

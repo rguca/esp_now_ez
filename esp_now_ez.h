@@ -23,7 +23,7 @@ public:
 	void startPair(uint16_t time_ms = 0);
 	void stopPair();
    void sendDiscovery(const uint8_t* dst_mac = nullptr);
-	void addPeer(const uint8_t* mac, bool encrypt = false);
+	void addPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	void installPeerLmk(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	~EspNowEz();
 
@@ -68,5 +68,6 @@ protected:
 
 	void installPmk(const uint8_t* pmk = nullptr);
 	void onMessageReceived(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len);
-	void onMessageSent(const uint8_t *mac_addr, esp_now_send_status_t status);
+	void onMessageSent(const uint8_t* mac_addr, esp_now_send_status_t status);
+	void logKey(const char* name, const uint8_t* key);
 };
