@@ -42,14 +42,14 @@ void EspNowEz::init(Config* config) {
 		srand(seed);
 
 		if (config->pmk == nullptr) {
-			config->pmk = new uint8_t[sizeof(Payload::Discovery::pmk)];
-			for (int i=0; i<sizeof(Payload::Discovery::pmk); i++) {
+			config->pmk = new uint8_t[sizeof(DiscoveryPayload::pmk)];
+			for (int i=0; i<sizeof(DiscoveryPayload::pmk); i++) {
 				config->pmk[i] = rand() & 0xff;
 			}
 		}
 		if (config->lmk == nullptr) {
-			config->lmk = new uint8_t[sizeof(Payload::Discovery::lmk)];
-			for (int i=0; i<sizeof(Payload::Discovery::lmk); i++) {
+			config->lmk = new uint8_t[sizeof(DiscoveryPayload::lmk)];
+			for (int i=0; i<sizeof(DiscoveryPayload::lmk); i++) {
 				config->lmk[i] = rand() & 0xff;
 			}
 		}
@@ -58,12 +58,20 @@ void EspNowEz::init(Config* config) {
 	this->logKey("lmk", this->config->lmk);
 
 	if (config->name == nullptr) {
-		config->name = new char[sizeof(Payload::Discovery::name)];
-		snprintf(config->name, sizeof(Payload::Discovery::name), "%02x%02x%02x%02x%02x%02x", 
+		config->name = new char[sizeof(DiscoveryPayload::name)];
+		snprintf(config->name, sizeof(DiscoveryPayload::name), "%02x%02x%02x%02x%02x%02x", 
 			chip_id[0], chip_id[1], chip_id[2], chip_id[3], chip_id[4], chip_id[5]);
 	}
 	
 	ESP_LOGI(TAG, "Initialized");
+}
+
+void EspNowEz::installPmk(const uint8_t* pmk) {
+	if (pmk != nullptr) {
+		std::memcpy(this->config->pmk, pmk, sizeof(DiscoveryPayload::pmk));
+	}
+	this->logKey("pmk", this->config->pmk);
+	ESP_ERROR_CHECK(esp_now_set_pmk(this->config->pmk));
 }
 
 void EspNowEz::startPair(uint16_t time_ms) {
@@ -90,23 +98,23 @@ void EspNowEz::stopPair() {
 	this->is_pair = false;
 }
 
-void EspNowEz::sendDiscovery(const uint8_t* dst_mac) {
-	if (dst_mac == nullptr) {
-		dst_mac = this->BROADCAST_MAC;
-	}
-
-	Payload::Discovery discovery;
+void EspNowEz::sendDiscovery(const uint8_t* mac) {
+	DiscoveryPayload discovery;
 	std::strncpy(discovery.name, this->config->name, sizeof(discovery.name));
 	discovery.name[sizeof(discovery.name) - 1] = '\0';
 	std::memcpy(discovery.pmk, this->config->pmk, sizeof(discovery.pmk));
 	std::memcpy(discovery.lmk, this->config->lmk, sizeof(discovery.lmk));
 
-	Payload payload;
-	payload.type = Payload::Type::DISCOVERY;
-	payload.body.discovery = discovery;
-
-	ESP_ERROR_CHECK(esp_now_send(dst_mac, (const uint8_t*) &payload, sizeof(payload)));
+	this->sendMessage(&discovery, mac);
 	ESP_LOGI(TAG, "Discovery sent");
+}
+
+void EspNowEz::sendMessage(const Payload* payload, const uint8_t* mac) {
+	if (mac == nullptr) {
+		mac = this->BROADCAST_MAC;
+	}
+	ESP_ERROR_CHECK(esp_now_send(mac, (const uint8_t*) payload, payload->size()));
+	ESP_LOGD(TAG, "Message sent to %02x:%02x:%02x:%02x:%02x:%02x",	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 void EspNowEz::addPeer(const uint8_t* mac, const uint8_t* lmk) {
@@ -123,15 +131,7 @@ void EspNowEz::addPeer(const uint8_t* mac, const uint8_t* lmk) {
 	ESP_ERROR_CHECK(esp_now_add_peer(&peer));
 }
 
-void EspNowEz::installPmk(const uint8_t* pmk) {
-	if (pmk != nullptr) {
-		std::memcpy(this->config->pmk, pmk, sizeof(Payload::Discovery::pmk));
-	}
-	this->logKey("pmk", this->config->pmk);
-	ESP_ERROR_CHECK(esp_now_set_pmk(this->config->pmk));
-}
-
-void EspNowEz::installPeerLmk(const uint8_t* mac, const uint8_t* lmk) {
+void EspNowEz::modifyPeer(const uint8_t* mac, const uint8_t* lmk) {
 	ESP_LOGD(TAG, "Modify peer: %02x:%02x:%02x:%02x:%02x:%02x",	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	esp_now_peer_info_t peer;
 	ESP_ERROR_CHECK(esp_now_get_peer(mac, &peer));
@@ -141,6 +141,17 @@ void EspNowEz::installPeerLmk(const uint8_t* mac, const uint8_t* lmk) {
 		this->logKey("lmk", lmk);
 	}
 	ESP_ERROR_CHECK(esp_now_mod_peer(&peer));
+}
+
+std::vector<esp_now_peer_info_t> EspNowEz::getPeers() {
+	std::vector<esp_now_peer_info_t> peers;
+	esp_now_peer_info_t peer;
+	if (esp_now_fetch_peer(true, &peer) != ESP_OK) return peers;
+	peers.push_back(peer);
+	while (esp_now_fetch_peer(false, &peer) == ESP_OK) {
+		peers.push_back(peer);
+	}
+	return peers;
 }
 
 void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
@@ -156,18 +167,17 @@ void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uin
 	const Payload* payload = reinterpret_cast<const Payload*>(data);
 
 	if (this->is_pair && payload->type == Payload::Type::DISCOVERY) {
-		ESP_LOGI(TAG, "Discovery received: %s", payload->body.discovery.name);
+		const DiscoveryPayload* discovery = reinterpret_cast<const DiscoveryPayload*>(payload);
+		ESP_LOGI(TAG, "Discovery received: %s", discovery->name);
 
-		const Payload::Discovery* discovery = &payload->body.discovery;
 		uint8_t* mac = recv_info->src_addr;
-
 		if (this->config->is_master) {
 			this->addPeer(mac, discovery->lmk);
 		} else {
 			this->addPeer(mac);
 			this->sendDiscovery(mac);
 			this->installPmk(discovery->pmk);
-			this->installPeerLmk(mac, discovery->lmk);
+			this->modifyPeer(mac, discovery->lmk);
 		}
 
 		this->stopPair();
@@ -175,7 +185,7 @@ void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uin
 }
 
 void EspNowEz::onMessageSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-	ESP_LOGI(TAG, "Delivery status: %s", status == ESP_NOW_SEND_SUCCESS ? "OK" : "NOK");
+	ESP_LOGD(TAG, "Delivery status: %s", status == ESP_NOW_SEND_SUCCESS ? "OK" : "NOK");
 }
 
 void EspNowEz::logKey(const char* name, const uint8_t* key) {
