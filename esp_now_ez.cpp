@@ -121,6 +121,7 @@ void EspNowEz::sendMessage(const Payload* payload, const uint8_t* mac) {
 void EspNowEz::addPeer(const uint8_t* mac, const uint8_t* lmk) {
 	ESP_LOGI(TAG, "Add peer: %02x:%02x:%02x:%02x:%02x:%02x",	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	esp_now_peer_info_t peer;
+	memset(&peer, 0, sizeof(esp_now_peer_info_t));
 	peer.ifidx = WIFI_IF_STA;
 	peer.channel = config->channel;
 	std::memcpy(peer.peer_addr, mac, ESP_NOW_ETH_ALEN);
@@ -135,6 +136,7 @@ void EspNowEz::addPeer(const uint8_t* mac, const uint8_t* lmk) {
 void EspNowEz::modifyPeer(const uint8_t* mac, const uint8_t* lmk) {
 	ESP_LOGD(TAG, "Modify peer: %02x:%02x:%02x:%02x:%02x:%02x",	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	esp_now_peer_info_t peer;
+	memset(&peer, 0, sizeof(esp_now_peer_info_t));
 	ESP_ERROR_CHECK(esp_now_get_peer(mac, &peer));
 	peer.encrypt = lmk != nullptr;
 	if (lmk != nullptr) {
