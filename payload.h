@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstring>
 #include "esp_now.h"
 
@@ -14,7 +16,7 @@ struct Payload {
    #define ESP_NOW_EZ_PAYLOAD_SIZE ESP_NOW_PAYLOAD_SIZE - 1
 
    Payload(Type type) { this->type = type; };
-   virtual uint8_t size() const { return ESP_NOW_PAYLOAD_SIZE; };
+   uint8_t size() const;
 };
 
 struct DiscoveryPayload : Payload {
@@ -22,18 +24,13 @@ struct DiscoveryPayload : Payload {
    uint8_t lmk[ESP_NOW_KEY_LEN];
    char name[100];
 
-   DiscoveryPayload() : Payload{DISCOVERY}{};
-   uint8_t size() { return sizeof(this); };
+   DiscoveryPayload();
 };
 
 struct TextPayload : Payload {
    char text[ESP_NOW_EZ_PAYLOAD_SIZE];
 
-   TextPayload(const char* text) : Payload{TEXT} {
-      strncpy(this->text, text, sizeof(this->text));
-      this->text[sizeof(this->text) - 1] = '\0';
-   };
-   uint8_t size() { return ESP_NOW_PAYLOAD_SIZE - sizeof(this) + strlen(this->text) + 1; };
+   TextPayload(const char* text);
 };
 
 struct DisplayTextPayload : Payload {
@@ -44,7 +41,6 @@ struct DisplayTextPayload : Payload {
    char text[ESP_NOW_EZ_PAYLOAD_SIZE - 6];
    
    DisplayTextPayload() : Payload{DISPLAY_TEXT}{};
-   uint8_t size() { return ESP_NOW_PAYLOAD_SIZE - sizeof(this) + strlen(this->text) + 1; };
 };
 #pragma pack(pop)
-// uint8_t (*__kaboom)[sizeof( DisplayTextPayload )] = 1; // check if size is <=250
+// uint8_t (*__kaboom)[sizeof( DiscoveryPayload )] = 1; // check if size is <=250
