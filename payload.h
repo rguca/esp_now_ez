@@ -15,14 +15,13 @@ struct Payload {
 
    #define ESP_NOW_EZ_PAYLOAD_SIZE ESP_NOW_PAYLOAD_SIZE - 1
 
-   Payload(Type type) { this->type = type; };
+   Payload(Type type);
    uint8_t size() const;
 };
 
 struct DiscoveryPayload : Payload {
-   uint8_t pmk[ESP_NOW_KEY_LEN];
-   uint8_t lmk[ESP_NOW_KEY_LEN];
-   char name[100];
+   uint8_t key[ESP_NOW_KEY_LEN];
+   char name[ESP_NOW_EZ_PAYLOAD_SIZE - ESP_NOW_KEY_LEN];
 
    DiscoveryPayload();
 };

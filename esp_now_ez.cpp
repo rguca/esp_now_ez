@@ -42,14 +42,14 @@ void EspNowEz::init(Config* config) {
 		srand(seed);
 
 		if (config->pmk == nullptr) {
-			config->pmk = new uint8_t[sizeof(DiscoveryPayload::pmk)];
-			for (int i=0; i<sizeof(DiscoveryPayload::pmk); i++) {
+			config->pmk = new uint8_t[sizeof(DiscoveryPayload::key)];
+			for (int i=0; i<sizeof(DiscoveryPayload::key); i++) {
 				config->pmk[i] = rand() & 0xff;
 			}
 		}
 		if (config->lmk == nullptr) {
-			config->lmk = new uint8_t[sizeof(DiscoveryPayload::lmk)];
-			for (int i=0; i<sizeof(DiscoveryPayload::lmk); i++) {
+			config->lmk = new uint8_t[sizeof(DiscoveryPayload::key)];
+			for (int i=0; i<sizeof(DiscoveryPayload::key); i++) {
 				config->lmk[i] = rand() & 0xff;
 			}
 		}
@@ -68,7 +68,7 @@ void EspNowEz::init(Config* config) {
 
 void EspNowEz::installPmk(const uint8_t* pmk) {
 	if (pmk != nullptr) {
-		std::memcpy(this->config->pmk, pmk, sizeof(DiscoveryPayload::pmk));
+		std::memcpy(this->config->pmk, pmk, sizeof(DiscoveryPayload::key));
 	}
 	this->logKey("pmk", this->config->pmk);
 	ESP_ERROR_CHECK(esp_now_set_pmk(this->config->pmk));
@@ -102,8 +102,8 @@ void EspNowEz::sendDiscovery(const uint8_t* mac) {
 	DiscoveryPayload discovery;
 	std::strncpy(discovery.name, this->config->name, sizeof(discovery.name));
 	discovery.name[sizeof(discovery.name) - 1] = '\0';
-	std::memcpy(discovery.pmk, this->config->pmk, sizeof(discovery.pmk));
-	std::memcpy(discovery.lmk, this->config->lmk, sizeof(discovery.lmk));
+	const uint8_t* key = this->config->is_master ? this->config->pmk : this->config->lmk;
+	std::memcpy(discovery.key, key, sizeof(DiscoveryPayload::key));
 
 	this->sendMessage(&discovery, mac);
 	ESP_LOGI(TAG, "Discovery sent");
@@ -172,11 +172,11 @@ void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uin
 
 		uint8_t* mac = recv_info->src_addr;
 		if (this->config->is_master) {
-			this->addPeer(mac, discovery->lmk);
+			this->addPeer(mac, discovery->key);
 		} else {
 			this->addPeer(mac);
 			this->sendDiscovery(mac);
-			this->installPmk(discovery->pmk);
+			this->installPmk(discovery->key);
 			this->modifyPeer(mac, config->lmk);
 		}
 
