@@ -28,9 +28,9 @@ public:
    void init(Config* config = nullptr);
 	void startPair(uint16_t time_ms = 0);
 	void stopPair();
-	void sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac = nullptr);
 	template<typename T>
-	void sendMessage(const T* payload, const uint8_t* mac = nullptr);
+	void sendMessage(T* data, const uint8_t* mac = nullptr);
+	void sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac = nullptr);
    void sendDiscovery(const uint8_t* mac = nullptr);
 	void addPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	void modifyPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
@@ -43,6 +43,7 @@ protected:
 	bool is_pair = false;
 
 	void installPmk(const uint8_t* pmk = nullptr);
+	void send(Payload* payload, uint8_t size, const uint8_t* mac = nullptr);
 	void onMessageReceived(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len);
 	void onMessageSent(const uint8_t* mac_addr, esp_now_send_status_t status);
 	uint16_t calcCrc(const uint8_t* data, uint8_t size);

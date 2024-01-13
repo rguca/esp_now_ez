@@ -110,10 +110,18 @@ void EspNowEz::sendDiscovery(const uint8_t* mac) {
 }
 
 void EspNowEz::sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac) {
+	auto payload = DataPayload{};
+   memcpy(payload.data, data, size);
+   this->send(&payload, ESP_NOW_EZ_HEADER_SIZE + size, mac);
+}
+
+void EspNowEz::send(Payload* payload, uint8_t size, const uint8_t* mac) {
 	if (mac == nullptr) {
 		mac = this->BROADCAST_MAC;
 	}
-	ESP_ERROR_CHECK(esp_now_send(mac, data, size));
+	payload->crc = this->calcCrc((uint8_t*) payload, size);
+
+	ESP_ERROR_CHECK(esp_now_send(mac, (uint8_t*) payload, size));
 	ESP_LOGD(TAG, "Sent %uB to %02x:%02x:%02x:%02x:%02x:%02x", size, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
