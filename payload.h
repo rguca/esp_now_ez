@@ -13,8 +13,8 @@ struct Payload {
 		DATA = 255
 	};
 
+	uint16_t crc = 0; // 2 byte
 	Type type; // 1 byte
-	uint16_t crc; // 2 byte
 
 	#define ESP_NOW_EZ_HEADER_SIZE 3
 	#define ESP_NOW_EZ_PAYLOAD_SIZE ESP_NOW_PAYLOAD_SIZE - ESP_NOW_EZ_HEADER_SIZE

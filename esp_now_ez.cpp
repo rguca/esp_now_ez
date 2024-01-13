@@ -23,10 +23,10 @@ void EspNowEz::init(Config* config) {
 	ESP_ERROR_CHECK(esp_now_init());
 	this->instance = this;
 	ESP_ERROR_CHECK(esp_now_register_recv_cb([](const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
-		EspNowEz::instance->onMessageReceived(recv_info, data, len);
+		EspNowEz::instance->onReceive(recv_info, data, len);
 	}));
 	ESP_ERROR_CHECK(esp_now_register_send_cb([](const uint8_t *mac_addr, esp_now_send_status_t status) {
-		EspNowEz::instance->onMessageSent(mac_addr, status);
+		EspNowEz::instance->onSent(mac_addr, status);
 	}));
 
 	// Add broadcast "peer"
@@ -164,14 +164,21 @@ std::vector<esp_now_peer_info_t> EspNowEz::getPeers() {
 	return peers;
 }
 
-void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
+void EspNowEz::onReceive(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
 	if (esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
 		uint8_t* s = recv_info->src_addr;
 		const char* b = memcmp(recv_info->des_addr, BROADCAST_MAC, sizeof(BROADCAST_MAC)) == 0 ? " (Broadcast)" : "";
-		ESP_LOGD(TAG, "Received %dB from %02x:%02x:%02x:%02x:%02x:%02x%s", len, s[0], s[1], s[2], s[3], s[4], s[5], b);
+		ESP_LOGD(TAG, "received %dB from %02x:%02x:%02x:%02x:%02x:%02x%s", len, s[0], s[1], s[2], s[3], s[4], s[5], b);
 	}
+	uint8_t crc_size = sizeof(Payload::crc);
+	if (len <= crc_size) return;
 
 	const Payload* payload = reinterpret_cast<const Payload*>(data);
+	uint16_t crc = this->calcCrc(data + crc_size, len - crc_size, crc_size);
+	if (payload->crc != crc) {
+		ESP_LOGD(TAG, "crc mismatch %04x<>%04x", payload->crc, crc);
+		return;
+	}
 
 	if (this->is_pair && payload->type == Payload::Type::DISCOVERY) {
 		const DiscoveryPayload* discovery = reinterpret_cast<const DiscoveryPayload*>(payload);
@@ -191,13 +198,21 @@ void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uin
 	}
 }
 
-void EspNowEz::onMessageSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+void EspNowEz::onSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 	ESP_LOGD(TAG, "Delivery status: %s", status == ESP_NOW_SEND_SUCCESS ? "OK" : "NOK");
 }
 
-uint16_t EspNowEz::calcCrc(const uint8_t* data, uint8_t size) {
-	uint16_t crc = CRC16::ARC::calc(data, size);
-	ESP_LOGD(TAG, "crc=%04x size=%u", crc, size);
+uint16_t EspNowEz::calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes) {
+	uint16_t crc;
+	if (pad_bytes) {
+		uint8_t padding[pad_bytes];
+		memset(padding, 0, pad_bytes);
+		crc = CRC16::ARC::calc(padding, pad_bytes);
+		crc = CRC16::ARC::calc(data, size, crc);
+	} else {
+		crc = CRC16::ARC::calc(data, size);
+	}
+	ESP_LOGD(TAG, "crc=%04x size=%u", crc, size + pad_bytes);
 	return crc;
 }
 
