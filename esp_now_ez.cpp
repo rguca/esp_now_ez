@@ -109,12 +109,11 @@ void EspNowEz::sendDiscovery(const uint8_t* mac) {
 	ESP_LOGI(TAG, "Discovery sent");
 }
 
-void EspNowEz::sendMessage(const Payload* payload, const uint8_t* mac) {
+void EspNowEz::sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac) {
 	if (mac == nullptr) {
 		mac = this->BROADCAST_MAC;
 	}
-	uint8_t size = payload->size();
-	ESP_ERROR_CHECK(esp_now_send(mac, (const uint8_t*) payload, size));
+	ESP_ERROR_CHECK(esp_now_send(mac, data, size));
 	ESP_LOGD(TAG, "Sent %uB to %02x:%02x:%02x:%02x:%02x:%02x", size, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
@@ -186,6 +185,12 @@ void EspNowEz::onMessageReceived(const esp_now_recv_info_t *recv_info, const uin
 
 void EspNowEz::onMessageSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 	ESP_LOGD(TAG, "Delivery status: %s", status == ESP_NOW_SEND_SUCCESS ? "OK" : "NOK");
+}
+
+uint16_t EspNowEz::calcCrc(const uint8_t* data, uint8_t size) {
+	uint16_t crc = CRC16::ARC::calc(data, size);
+	ESP_LOGD(TAG, "crc=%04x size=%u", crc, size);
+	return crc;
 }
 
 void EspNowEz::logKey(const char* name, const uint8_t* key) {

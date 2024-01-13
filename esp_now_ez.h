@@ -1,11 +1,14 @@
 #include <cstring>
 #include <vector>
+
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_now.h"
 #include "esp_mac.h"
 #include "nvs_flash.h"
+
+#include "cppcrc.h"
 
 #include "payload.h"
 
@@ -25,7 +28,9 @@ public:
    void init(Config* config = nullptr);
 	void startPair(uint16_t time_ms = 0);
 	void stopPair();
-	void sendMessage(const Payload* payload, const uint8_t* mac = nullptr);
+	void sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac = nullptr);
+	template<typename T>
+	void sendMessage(const T* payload, const uint8_t* mac = nullptr);
    void sendDiscovery(const uint8_t* mac = nullptr);
 	void addPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	void modifyPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
@@ -40,5 +45,8 @@ protected:
 	void installPmk(const uint8_t* pmk = nullptr);
 	void onMessageReceived(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len);
 	void onMessageSent(const uint8_t* mac_addr, esp_now_send_status_t status);
+	uint16_t calcCrc(const uint8_t* data, uint8_t size);
 	void logKey(const char* name, const uint8_t* key);
 };
+
+#include "esp_now_ez.tpp"
