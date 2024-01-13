@@ -46,6 +46,7 @@ protected:
 	void send(Payload* payload, uint8_t size, const uint8_t* mac = nullptr);
 	void onReceive(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len);
 	void onSent(const uint8_t* mac_addr, esp_now_send_status_t status);
+	bool checkCrc(const Payload* payload, uint8_t size);
 	uint16_t calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes = 0);
 	void logKey(const char* name, const uint8_t* key);
 };

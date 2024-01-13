@@ -170,15 +170,9 @@ void EspNowEz::onReceive(const esp_now_recv_info_t *recv_info, const uint8_t *da
 		const char* b = memcmp(recv_info->des_addr, BROADCAST_MAC, sizeof(BROADCAST_MAC)) == 0 ? " (Broadcast)" : "";
 		ESP_LOGD(TAG, "received %dB from %02x:%02x:%02x:%02x:%02x:%02x%s", len, s[0], s[1], s[2], s[3], s[4], s[5], b);
 	}
-	uint8_t crc_size = sizeof(Payload::crc);
-	if (len <= crc_size) return;
 
 	const Payload* payload = reinterpret_cast<const Payload*>(data);
-	uint16_t crc = this->calcCrc(data + crc_size, len - crc_size, crc_size);
-	if (payload->crc != crc) {
-		ESP_LOGD(TAG, "crc mismatch %04x<>%04x", payload->crc, crc);
-		return;
-	}
+	if (!this->checkCrc(payload, len)) return;
 
 	if (this->is_pair && payload->type == Payload::Type::DISCOVERY) {
 		const DiscoveryPayload* discovery = reinterpret_cast<const DiscoveryPayload*>(payload);
@@ -200,6 +194,20 @@ void EspNowEz::onReceive(const esp_now_recv_info_t *recv_info, const uint8_t *da
 
 void EspNowEz::onSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 	ESP_LOGD(TAG, "Delivery status: %s", status == ESP_NOW_SEND_SUCCESS ? "OK" : "NOK");
+}
+
+bool EspNowEz::checkCrc(const Payload* payload, uint8_t size) {
+	uint8_t crc_size = sizeof(Payload::crc);
+	if (size <= crc_size) return false;
+
+	uint16_t crc = this->calcCrc(((uint8_t*)payload) + crc_size, size - crc_size, crc_size);
+	if (payload->crc != crc) {
+		ESP_LOGD(TAG, "crc mismatch %04x<>%04x", payload->crc, crc);
+		return false;
+	}
+
+	ESP_LOGD(TAG, "crc match");
+	return true;
 }
 
 uint16_t EspNowEz::calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes) {
