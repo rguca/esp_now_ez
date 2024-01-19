@@ -5,9 +5,11 @@
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_now.h"
-// #include "esp_mac.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
+#ifndef CONFIG_IDF_TARGET_ESP8266
+	#include "esp_mac.h"
+#endif
 
 #include "cppcrc.h"
 
