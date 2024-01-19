@@ -146,17 +146,21 @@ void EspNowEz::send(Payload* payload, uint8_t size, const uint8_t* mac) {
 
 void EspNowEz::addPeer(const uint8_t* mac, const uint8_t* lmk) {
 	ESP_LOGI(TAG, "Add peer: %02x:%02x:%02x:%02x:%02x:%02x",	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-	esp_now_peer_info_t peer;
-	memset(&peer, 0, sizeof(esp_now_peer_info_t));
-	peer.ifidx = WIFI_IF_STA;
-	peer.channel = config->channel;
-	std::memcpy(peer.peer_addr, mac, ESP_NOW_ETH_ALEN);
-	peer.encrypt = lmk != nullptr;
+	esp_now_peer_info_t peer_info;
+	memset(&peer_info, 0, sizeof(esp_now_peer_info_t));
+	peer_info.ifidx = WIFI_IF_STA;
+	peer_info.channel = config->channel;
+	std::memcpy(peer_info.peer_addr, mac, ESP_NOW_ETH_ALEN);
+	peer_info.encrypt = lmk != nullptr;
 	if (lmk != nullptr) {
-		std::memcpy(peer.lmk, lmk, sizeof(ESP_NOW_KEY_LEN));
+		std::memcpy(peer_info.lmk, lmk, sizeof(ESP_NOW_KEY_LEN));
 		this->logKey("lmk", lmk);
 	}
-	ESP_ERROR_CHECK(esp_now_add_peer(&peer));
+	ESP_ERROR_CHECK(esp_now_add_peer(&peer_info));
+
+	if (!this->isBroadcastMac(peer_info.peer_addr)) {
+		this->peers.push_back(new Peer(peer_info));
+	}
 }
 
 void EspNowEz::modifyPeer(const uint8_t* mac, const uint8_t* lmk) {
@@ -172,15 +176,31 @@ void EspNowEz::modifyPeer(const uint8_t* mac, const uint8_t* lmk) {
 	ESP_ERROR_CHECK(esp_now_mod_peer(&peer));
 }
 
-std::vector<esp_now_peer_info_t> EspNowEz::getPeers() {
-	std::vector<esp_now_peer_info_t> peers;
-	esp_now_peer_info_t peer;
-	if (esp_now_fetch_peer(true, &peer) != ESP_OK) return peers;
-	peers.push_back(peer);
-	while (esp_now_fetch_peer(false, &peer) == ESP_OK) {
-		peers.push_back(peer);
+std::vector<EspNowEz::Peer*> EspNowEz::getPeers() {
+	if (this->peers.size() > 0)
+		return this->peers;
+
+	esp_now_peer_info_t peer_info;
+	if (esp_now_fetch_peer(true, &peer_info) != ESP_OK) 
+		return this->peers;
+	
+	do {
+		this->peers.push_back(new Peer(peer_info));
+	} while (esp_now_fetch_peer(false, &peer_info) == ESP_OK);
+
+	return this->peers;
+}
+
+EspNowEz::Peer* EspNowEz::findPeer(const uint8_t* mac) {
+	for(auto it = this->peers.begin(); it != this->peers.end(); ++it) {
+		if (memcmp(mac, (*it)->mac, ESP_NOW_ETH_ALEN) != 0)
+			continue;
+		if (it != this->peers.begin()) {
+			std::rotate(this->peers.begin(), it, this->peers.end()); // move to front
+		}
+		return *this->peers.begin();
 	}
-	return peers;
+	return nullptr;
 }
 
 void EspNowEz::onReceive(const uint8_t *mac, const uint8_t *data, int len) {
@@ -249,9 +269,24 @@ void EspNowEz::logKey(const char* name, const uint8_t* key) {
 			name, k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15]);
 }
 
+bool EspNowEz::isBroadcastMac(const uint8_t* mac) {
+	return memcmp(mac, BROADCAST_MAC, ESP_NOW_ETH_ALEN) == 0;
+}
+
 EspNowEz::~EspNowEz() {
+	for(EspNowEz::Peer* peer : this->peers) {
+		delete peer;
+	}
+
 	delete this->config->name;
 	delete[] this->config->pmk;
 	delete[] this->config->lmk;
 	delete this->config;
+}
+
+EspNowEz::Peer::Peer(esp_now_peer_info peer_info) {
+	memcpy(this->mac, peer_info.peer_addr, sizeof(Peer::mac));
+	if (peer_info.encrypt) {
+		memcpy(this->lmk, peer_info.lmk, sizeof(Peer::lmk));
+	}
 }

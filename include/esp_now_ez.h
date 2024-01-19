@@ -1,5 +1,6 @@
 #include <cstring>
 #include <vector>
+#include <algorithm>
 
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -25,6 +26,14 @@ public:
 		uint8_t* lmk = nullptr;
 	};
 
+	struct Peer {
+		uint8_t mac[ESP_NOW_ETH_ALEN];
+    	uint8_t lmk[ESP_NOW_KEY_LEN];
+		uint32_t seq = 0;
+
+		Peer(esp_now_peer_info peer_info);
+	};
+
 	const char* TAG = "espnowez";
    const uint8_t BROADCAST_MAC[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -37,13 +46,16 @@ public:
    void sendDiscovery(const uint8_t* mac = nullptr);
 	void addPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	void modifyPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
-	std::vector<esp_now_peer_info_t> getPeers();
+	Peer* findPeer(const uint8_t* mac);
+	std::vector<Peer*> getPeers();
+	bool isBroadcastMac(const uint8_t* mac);
 	~EspNowEz();
 
 protected:
 	static EspNowEz* instance;
 	Config* config;
 	bool is_pair = false;
+	std::vector<Peer*> peers;
 
 	void installPmk(const uint8_t* pmk = nullptr);
 	void send(Payload* payload, uint8_t size, const uint8_t* mac = nullptr);
