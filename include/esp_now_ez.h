@@ -5,7 +5,8 @@
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_now.h"
-#include "esp_mac.h"
+// #include "esp_mac.h"
+#include "esp_system.h"
 #include "nvs_flash.h"
 
 #include "cppcrc.h"
@@ -44,7 +45,7 @@ protected:
 
 	void installPmk(const uint8_t* pmk = nullptr);
 	void send(Payload* payload, uint8_t size, const uint8_t* mac = nullptr);
-	void onReceive(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len);
+	void onReceive(const uint8_t *mac, const uint8_t *data, int len);
 	void onSent(const uint8_t* mac_addr, esp_now_send_status_t status);
 	bool checkCrc(const Payload* payload, uint8_t size);
 	uint16_t calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes = 0);

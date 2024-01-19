@@ -1,4 +1,4 @@
-#include "esp_now_ez.h"
+#include "include/esp_now_ez.h"
 
 EspNowEz* EspNowEz::instance;
 
@@ -7,24 +7,46 @@ void EspNowEz::init(Config* config) {
 		config = new Config;
 	}
 	this->config = config;
+
+	uint8_t chip_id[6];
+   ESP_ERROR_CHECK(esp_efuse_mac_get_default(chip_id));
+	esp_base_mac_addr_set(chip_id); // Without this, base mac is read multiple times from nvs
+	
 	ESP_ERROR_CHECK(nvs_flash_init());
+
 	ESP_ERROR_CHECK(esp_netif_init());
 	ESP_ERROR_CHECK(esp_event_loop_create_default());
+
 	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 	cfg.nvs_enable = 0;
 	ESP_ERROR_CHECK(esp_wifi_init(&cfg) );
 	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 	ESP_ERROR_CHECK(esp_wifi_start());
-	ESP_ERROR_CHECK(esp_wifi_set_channel(config->channel, WIFI_SECOND_CHAN_NONE));
-
-	// Enable long range
-	ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR));
+	uint8_t primary_channel;
+	wifi_second_chan_t secondary_channel;
+	ESP_ERROR_CHECK(esp_wifi_get_channel(&primary_channel, &secondary_channel));
+	if (primary_channel != config->channel) {
+		ESP_LOGD(TAG, "switching channel %u -> %u", primary_channel, config->channel);
+		ESP_ERROR_CHECK(esp_wifi_set_channel(config->channel, WIFI_SECOND_CHAN_NONE));
+	}
+	#ifdef CONFIG_IDF_TARGET_ESP8266
+		ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N));
+	#else
+		// Enable long range
+		ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR));
+	#endif
 
 	ESP_ERROR_CHECK(esp_now_init());
 	this->instance = this;
-	ESP_ERROR_CHECK(esp_now_register_recv_cb([](const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
-		EspNowEz::instance->onReceive(recv_info, data, len);
-	}));
+	#ifdef CONFIG_IDF_TARGET_ESP8266
+		ESP_ERROR_CHECK(esp_now_register_recv_cb([](const uint8_t* mac, const uint8_t *data, int len) {
+			EspNowEz::instance->onReceive(mac, data, len);
+		}));
+	#else
+		ESP_ERROR_CHECK(esp_now_register_recv_cb([](const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
+			EspNowEz::instance->onReceive(recv_info->src_addr, data, len);
+		}));
+	#endif
 	ESP_ERROR_CHECK(esp_now_register_send_cb([](const uint8_t *mac_addr, esp_now_send_status_t status) {
 		EspNowEz::instance->onSent(mac_addr, status);
 	}));
@@ -33,9 +55,6 @@ void EspNowEz::init(Config* config) {
 	this->addPeer(this->BROADCAST_MAC);
 
 	// Generate keys
-	uint8_t chip_id[6];
-   ESP_ERROR_CHECK(esp_efuse_mac_get_default(chip_id));
-
 	if (config->pmk == nullptr || config->lmk == nullptr) {
 		unsigned int seed;
 		std::memcpy(&seed, chip_id, sizeof(unsigned int));
@@ -164,11 +183,9 @@ std::vector<esp_now_peer_info_t> EspNowEz::getPeers() {
 	return peers;
 }
 
-void EspNowEz::onReceive(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
-	if (esp_log_level_get(TAG) >= ESP_LOG_DEBUG) {
-		uint8_t* s = recv_info->src_addr;
-		const char* b = memcmp(recv_info->des_addr, BROADCAST_MAC, sizeof(BROADCAST_MAC)) == 0 ? " (Broadcast)" : "";
-		ESP_LOGD(TAG, "received %dB from %02x:%02x:%02x:%02x:%02x:%02x%s", len, s[0], s[1], s[2], s[3], s[4], s[5], b);
+void EspNowEz::onReceive(const uint8_t *mac, const uint8_t *data, int len) {
+	if constexpr(LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
+		ESP_LOGD(TAG, "received %dB from %02x:%02x:%02x:%02x:%02x:%02x", len, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	}
 
 	const Payload* payload = reinterpret_cast<const Payload*>(data);
@@ -178,7 +195,6 @@ void EspNowEz::onReceive(const esp_now_recv_info_t *recv_info, const uint8_t *da
 		const DiscoveryPayload* discovery = reinterpret_cast<const DiscoveryPayload*>(payload);
 		ESP_LOGI(TAG, "Discovery received: %s", discovery->name);
 
-		uint8_t* mac = recv_info->src_addr;
 		if (this->config->is_master) {
 			this->addPeer(mac, discovery->key);
 		} else {
@@ -225,7 +241,7 @@ uint16_t EspNowEz::calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes)
 }
 
 void EspNowEz::logKey(const char* name, const uint8_t* key) {
-	if (esp_log_level_get(TAG) < ESP_LOG_DEBUG) {
+	if (LOG_LOCAL_LEVEL < ESP_LOG_DEBUG) {
 		return;
 	}
 	const uint8_t* k = key;
