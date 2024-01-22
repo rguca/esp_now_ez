@@ -69,17 +69,15 @@ bool Ecdh::generateSharedSecret(const uint8_t* public_key, uint8_t* shared_secre
 		return false;
 	}
 
+	mbedtls_mpi a;
+	mbedtls_mpi_init(&a);
+	ERROR_CHECK(mbedtls_mpi_read_binary(&a, this->private_key, ECDH_KEY_SIZE));
+
 	mbedtls_ctr_drbg_context ctr_drbg;
 	mbedtls_ctr_drbg_init(&ctr_drbg);
 	mbedtls_entropy_context entropy;
 	mbedtls_entropy_init(&entropy);
-	uint8_t personal[256];
-	esp_fill_random(personal, sizeof(personal));
-	ERROR_CHECK(mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, personal, sizeof(personal)));
-
-	mbedtls_mpi a;
-	mbedtls_mpi_init(&a);
-	ERROR_CHECK(mbedtls_mpi_read_binary(&a, this->private_key, ECDH_KEY_SIZE));
+	ERROR_CHECK(mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, nullptr, 0));
 
 	mbedtls_ecp_point S;
 	mbedtls_ecp_point_init(&S);
@@ -108,10 +106,9 @@ bool Ecdh::generateSharedSecret(const uint8_t* public_key, uint8_t* shared_secre
 	mbedtls_entropy_free(&entropy);
 	mbedtls_ctr_drbg_free(&ctr_drbg);
 	mbedtls_mpi_free(&a);
-	mbedtls_ecp_point_free(&S);
 	mbedtls_ecp_point_free(&B);
+	mbedtls_ecp_point_free(&S);
 
-	mbedtls_platform_zeroize(personal, sizeof(personal));
 	mbedtls_platform_zeroize(S_bytes, sizeof(S_bytes));
 
 	return true;
