@@ -1,11 +1,16 @@
 #include <sdkconfig.h>
 #include <esp_log.h>
 #include <stdlib.h>
-#include <esp_random.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/sha512.h>
 #include <mbedtls/hkdf.h>
+#include <mbedtls/platform_util.h>
+#ifdef CONFIG_IDF_TARGET_ESP8266
+	#include <esp_system.h>
+#else
+	#include <esp_random.h>
+#endif
 
 #include "ecdh.h"
 
