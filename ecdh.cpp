@@ -66,6 +66,7 @@ bool Ecdh::generateSharedSecret(const uint8_t* public_key, uint8_t* shared_secre
 	mbedtls_ecp_point_init(&B);
 	ERROR_CHECK(mbedtls_ecp_point_read_binary(&ecp_group, &B, public_key, ECDH_KEY_SIZE));
 	if (mbedtls_ecp_check_pubkey(&ecp_group, &B) != 0) {
+		ESP_LOGE(TAG, "Invalid public key");
 		return false;
 	}
 

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <mbedtls/ecp.h>
 
 class Ecdh {

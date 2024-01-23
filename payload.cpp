@@ -7,7 +7,7 @@ Payload::Payload(Type type) {
 DiscoveryPayload::DiscoveryPayload() : Payload{DISCOVERY} {
 }
 
-TimePayload::TimePayload() : Payload{TIME} {
+ConfigPayload::ConfigPayload() : Payload{CONFIG} {
 }
 
 DataPayload::DataPayload() : Payload{DATA} {
