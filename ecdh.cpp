@@ -1,20 +1,21 @@
 #include <cstring>
 #include <sdkconfig.h>
-#include <esp_log.h>
 #include <stdlib.h>
-#include <mbedtls/entropy.h>
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/md5.h>
-#include <mbedtls/platform_util.h>
+#include <esp_log.h>
 #ifdef CONFIG_IDF_TARGET_ESP8266
 	#include <esp_system.h>
 #else
 	#include <esp_random.h>
+	#define MBEDTLS_ALLOW_PRIVATE_ACCESS
 #endif
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/md5.h>
+#include <mbedtls/platform_util.h>
 
 #include "ecdh.h"
 
-#define ERROR_CHECK(ret) { if (ret != 0) { ESP_LOGE(TAG, "error: %x @%s:%d", ret, __ESP_FILE__, __LINE__); abort(); } }
+#define ERROR_CHECK(ret) { if (ret != 0) { ESP_LOGE(TAG, "error: %x line:%d", ret, __LINE__); abort(); } }
 
 static void flip_endian(uint8_t *data, size_t len) {
     uint8_t swp_buf;
