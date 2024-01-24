@@ -304,7 +304,7 @@ bool EspNowEz::checkSeq(const uint8_t *mac, const Payload* payload) {
 		return false;
 	}
 	if (payload->seq != (peer->seq + 1)) {
-		if (this->is_debug) ESP_LOGD(TAG, "seq NOK: %04lx<>%04lx", payload->seq, (peer->seq + 1));
+		if (this->is_debug) ESP_LOGD(TAG, "seq NOK: %04x<>%04x", payload->seq, (peer->seq + 1));
 		return false;
 	}
 	peer->seq++;
@@ -319,7 +319,7 @@ void EspNowEz::setSeq(const uint8_t *mac, uint32_t seq) {
 		return;
 	}
 	peer->seq = seq;
-	if (this->is_debug) ESP_LOGD(TAG, "seq=%lu", seq);
+	if (this->is_debug) ESP_LOGD(TAG, "seq=%u", seq);
 }
 
 void EspNowEz::logKey(const char* name, const uint8_t* key) {
