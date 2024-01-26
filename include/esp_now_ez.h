@@ -1,4 +1,5 @@
 #include <vector>
+#include <functional>
 #include <esp_now.h>
 #include "ecdh.h"
 #include "payload.h"
@@ -21,6 +22,8 @@ public:
 		Peer(esp_now_peer_info peer_info);
 	};
 
+	typedef std::function<void(const uint8_t* data, size_t size)> OnMessageCallback;
+
 	const char* TAG = "espnowez";
    const uint8_t BROADCAST_MAC[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -32,6 +35,7 @@ public:
 	void sendMessage(T* data, const uint8_t* mac = nullptr);
 	void sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac = nullptr);
    void sendDiscovery(const uint8_t* mac = nullptr);
+	void onMessage(OnMessageCallback callback);
 	void addPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	void modifyPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	Peer* findPeer(const uint8_t* mac);
@@ -48,6 +52,7 @@ protected:
 	Config* config;
 	bool is_pair = false;
 	std::vector<Peer*> peers;
+	OnMessageCallback on_message_callback;
 
 	void send(Payload* payload, uint8_t size, const uint8_t* mac = nullptr);
 	void onReceive(const uint8_t *mac, const uint8_t *data, int len);

@@ -144,7 +144,7 @@ void EspNowEz::send(Payload* payload, uint8_t size, const uint8_t* mac) {
 		Peer* peer = this->findPeer(mac);
 		if (peer) {
 			payload->seq = ++peer->send_seq;
-			if (this->is_debug) ESP_LOGD(TAG, "seq=%08x", (unsigned int)payload->seq);
+			if (this->is_debug) ESP_LOGD(TAG, "seq=%08" PRIx32, payload->seq);
 		}
 	}
 	payload->crc = this->calcCrc((uint8_t*) payload, size);
@@ -215,6 +215,10 @@ EspNowEz::Peer* EspNowEz::findPeer(const uint8_t* mac) {
 	return nullptr;
 }
 
+void EspNowEz::onMessage(OnMessageCallback callback) {
+	this->on_message_callback = callback;
+}
+
 void EspNowEz::onReceive(const uint8_t *mac, const uint8_t *data, int len) {
 	if (this->is_debug)
 		ESP_LOGD(TAG, "received %dB from %02x:%02x:%02x:%02x:%02x:%02x", len, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -222,7 +226,9 @@ void EspNowEz::onReceive(const uint8_t *mac, const uint8_t *data, int len) {
 	const Payload* payload = reinterpret_cast<const Payload*>(data);
 	if (!this->checkCrc(payload, len)) return;
 
-	if (this->is_pair && payload->type == Payload::Type::DISCOVERY) {
+	if (payload->type == Payload::Type::DISCOVERY) {
+		if (!this->is_pair) return;
+
 		const DiscoveryPayload* discovery = reinterpret_cast<const DiscoveryPayload*>(payload);
 		if (!this->checkSize(discovery, len)) {
 			return;
@@ -246,6 +252,11 @@ void EspNowEz::onReceive(const uint8_t *mac, const uint8_t *data, int len) {
 	}
 
 	if (!this->checkSeq(mac, payload)) return;
+
+	if (payload->type == Payload::Type::DATA) {
+		const DataPayload* data = reinterpret_cast<const DataPayload*>(payload);
+		if (this->on_message_callback) this->on_message_callback(data->data, len - ESP_NOW_EZ_HEADER_SIZE);
+	}
 }
 
 void EspNowEz::onSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -276,7 +287,7 @@ uint16_t EspNowEz::calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes)
 	} else {
 		crc = CRC16::ARC::calc(data, size);
 	}
-	if (this->is_debug) ESP_LOGD(TAG, "crc=%04x size=%u", crc, size + pad_bytes);
+	if (this->is_debug) ESP_LOGD(TAG, "crc=%04x", crc);
 	return crc;
 }
 
@@ -287,7 +298,7 @@ bool EspNowEz::checkSeq(const uint8_t *mac, const Payload* payload) {
 		return false;
 	}
 	if (payload->seq != (peer->recv_seq + 1)) {
-		if (this->is_debug) ESP_LOGD(TAG, "seq NOK: %08x<>%08x", (unsigned int)payload->seq, (unsigned int)(peer->recv_seq + 1));
+		if (this->is_debug) ESP_LOGD(TAG, "seq NOK: %08" PRIx32 "<>%08" PRIx32, payload->seq, (peer->recv_seq + 1));
 		return false;
 	}
 	peer->recv_seq++;
