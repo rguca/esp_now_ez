@@ -131,19 +131,6 @@ void EspNowEz::sendDiscovery(const uint8_t* mac) {
 	ESP_LOGI(TAG, "Discovery sent");
 }
 
-void EspNowEz::sendConfig(const uint8_t* mac) {
-	Peer* peer = this->findPeer(mac);
-	if (!peer) {
-		ESP_LOGE(TAG, "Can't send config: peer not found");
-		return;
-	}
-	ConfigPayload payload;
-	payload.seq = peer->seq;
-
-	this->sendMessage(&payload, mac);
-	if (this->is_debug) ESP_LOGD(TAG, "config sent");
-}
-
 void EspNowEz::sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac) {
 	auto payload = DataPayload{};
    memcpy(payload.data, data, size);
@@ -156,7 +143,8 @@ void EspNowEz::send(Payload* payload, uint8_t size, const uint8_t* mac) {
 	} else {
 		Peer* peer = this->findPeer(mac);
 		if (peer) {
-			payload->seq = peer->seq++;
+			payload->seq = ++peer->send_seq;
+			if (this->is_debug) ESP_LOGD(TAG, "seq=%08x", (unsigned int)payload->seq);
 		}
 	}
 	payload->crc = this->calcCrc((uint8_t*) payload, size);
@@ -257,11 +245,6 @@ void EspNowEz::onReceive(const uint8_t *mac, const uint8_t *data, int len) {
 		return;
 	}
 
-	if (!this->config->is_server && payload->type == Payload::Type::CONFIG) {
-		this->setSeq(mac, payload->seq);
-		return;
-	}
-
 	if (!this->checkSeq(mac, payload)) return;
 }
 
@@ -303,23 +286,13 @@ bool EspNowEz::checkSeq(const uint8_t *mac, const Payload* payload) {
 		if (this->is_debug) ESP_LOGD(TAG, "seq NOK: peer not found");
 		return false;
 	}
-	if (payload->seq != (peer->seq + 1)) {
-		if (this->is_debug) ESP_LOGD(TAG, "seq NOK: %04x<>%04x", (unsigned int)payload->seq, (unsigned int)(peer->seq + 1));
+	if (payload->seq != (peer->recv_seq + 1)) {
+		if (this->is_debug) ESP_LOGD(TAG, "seq NOK: %08x<>%08x", (unsigned int)payload->seq, (unsigned int)(peer->recv_seq + 1));
 		return false;
 	}
-	peer->seq++;
+	peer->recv_seq++;
 	if (this->is_debug) ESP_LOGD(TAG, "seq OK");
 	return true;
-}
-
-void EspNowEz::setSeq(const uint8_t *mac, uint32_t seq) {
-	Peer* peer = this->findPeer(mac);
-	if (!peer) {
-		if (this->is_debug) ESP_LOGD(TAG, "set seq: peer not found");
-		return;
-	}
-	peer->seq = seq;
-	if (this->is_debug) ESP_LOGD(TAG, "seq=%u", (unsigned int)seq);
 }
 
 void EspNowEz::logKey(const char* name, const uint8_t* key) {
@@ -347,7 +320,4 @@ EspNowEz::~EspNowEz() {
 
 EspNowEz::Peer::Peer(esp_now_peer_info peer_info) {
 	memcpy(this->mac, peer_info.peer_addr, sizeof(Peer::mac));
-	if (peer_info.encrypt) {
-		memcpy(this->lmk, peer_info.lmk, sizeof(Peer::lmk));
-	}
 }

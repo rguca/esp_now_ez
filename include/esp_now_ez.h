@@ -15,8 +15,8 @@ public:
 
 	struct Peer {
 		uint8_t mac[ESP_NOW_ETH_ALEN];
-    	uint8_t lmk[ESP_NOW_KEY_LEN];
-		uint32_t seq = 0;
+		uint32_t send_seq = 0;
+		uint32_t recv_seq = 0;
 
 		Peer(esp_now_peer_info peer_info);
 	};
@@ -32,7 +32,6 @@ public:
 	void sendMessage(T* data, const uint8_t* mac = nullptr);
 	void sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac = nullptr);
    void sendDiscovery(const uint8_t* mac = nullptr);
-	void sendConfig(const uint8_t* mac);
 	void addPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	void modifyPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	Peer* findPeer(const uint8_t* mac);
@@ -58,7 +57,6 @@ protected:
 	bool checkCrc(const Payload* payload, uint8_t size);
 	uint16_t calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes = 0);
 	bool checkSeq(const uint8_t *mac, const Payload* payload);
-	void setSeq(const uint8_t *mac, uint32_t seq);
 	void logKey(const char* name, const uint8_t* key);
 };
 
