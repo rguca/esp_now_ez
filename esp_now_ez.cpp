@@ -123,21 +123,21 @@ void EspNowEz::stopPair() {
 }
 
 void EspNowEz::sendDiscovery(const uint8_t* mac) {
+	ESP_LOGI(TAG, "Send discovery");
 	DiscoveryPayload discovery;
 	std::strncpy(discovery.name, this->config->name, sizeof(discovery.name));
 	discovery.name[sizeof(discovery.name) - 1] = '\0';
 	std::memcpy(discovery.key, this->config->ecdh->public_key, ECDH_KEY_SIZE);
 
 	this->sendMessage(&discovery, mac);
-	ESP_LOGI(TAG, "Discovery sent");
 }
 
 void EspNowEz::sendConfig(const uint8_t* mac, uint32_t old_seq) {
+	if (this->is_debug) ESP_LOGD(TAG, "send config");
 	ConfigPayload payload;
 	payload.old_seq = old_seq;
 
 	this->sendMessage(&payload, mac);
-	if (this->is_debug) ESP_LOGD(TAG, "config sent");
 }
 
 void EspNowEz::sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac) {
@@ -147,6 +147,9 @@ void EspNowEz::sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac
 }
 
 void EspNowEz::send(Payload* payload, uint8_t size, const uint8_t* mac) {
+	if (this->is_debug)
+		ESP_LOGD(TAG, "Send %uB to %02x:%02x:%02x:%02x:%02x:%02x", size, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
 	if (mac == nullptr) {
 		mac = this->BROADCAST_MAC;
 	} else {
@@ -156,11 +159,10 @@ void EspNowEz::send(Payload* payload, uint8_t size, const uint8_t* mac) {
 			if (this->is_debug) ESP_LOGD(TAG, "seq=%08" PRIx32, payload->seq);
 		}
 	}
+
 	payload->crc = this->calcCrc((uint8_t*) payload, size);
 
 	ESP_ERROR_CHECK(esp_now_send(mac, (uint8_t*) payload, size));
-	if (this->is_debug)
-		ESP_LOGD(TAG, "Sent %uB to %02x:%02x:%02x:%02x:%02x:%02x", size, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 void EspNowEz::addPeer(const uint8_t* mac, const uint8_t* lmk) {

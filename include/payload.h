@@ -31,7 +31,6 @@ struct DiscoveryPayload : Payload {
 
 struct ConfigPayload : Payload {
 	uint32_t old_seq = 0; // 4 byte
-	uint32_t seq = 0; // 4 byte
 	uint32_t sleep_ms = 0; // 4 byte
 
 	ConfigPayload();
