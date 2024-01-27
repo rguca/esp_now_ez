@@ -134,8 +134,15 @@ void EspNowEz::sendDiscovery(const uint8_t* mac) {
 
 void EspNowEz::sendConfig(const uint8_t* mac, uint32_t old_seq) {
 	if (this->is_debug) ESP_LOGD(TAG, "send config");
+	Peer* peer = this->findPeer(mac);
+	if (!peer) {
+		if (this->is_debug) ESP_LOGD(TAG, "peer not found");
+		return;
+	}
+
 	ConfigPayload payload;
 	payload.old_seq = old_seq;
+	payload.new_seq = peer->recv_seq;
 
 	this->sendMessage(&payload, mac);
 }
@@ -147,12 +154,14 @@ void EspNowEz::sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac
 }
 
 void EspNowEz::send(Payload* payload, uint8_t size, const uint8_t* mac) {
+	bool is_broadcast = mac == nullptr;
+	if (is_broadcast)
+		mac = this->BROADCAST_MAC;
+
 	if (this->is_debug)
 		ESP_LOGD(TAG, "Send %uB to %02x:%02x:%02x:%02x:%02x:%02x", size, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-	if (mac == nullptr) {
-		mac = this->BROADCAST_MAC;
-	} else {
+	if (!is_broadcast) {
 		Peer* peer = this->findPeer(mac);
 		if (peer) {
 			payload->seq = ++peer->send_seq;
@@ -334,8 +343,8 @@ bool EspNowEz::checkConfig(const uint8_t *mac, const ConfigPayload* config) {
 		return false;
 	}
 	if (this->is_debug) ESP_LOGD(TAG, "config OK");
-	if (config->seq != peer->send_seq) {
-		peer->send_seq = config->seq;
+	if (config->new_seq != peer->send_seq) {
+		peer->send_seq = config->new_seq;
 		if (this->is_debug) ESP_LOGD(TAG, "seq=%08" PRIx32, peer->send_seq);
 	}
 	return true;
