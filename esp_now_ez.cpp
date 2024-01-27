@@ -3,14 +3,15 @@
 #include <cstring>
 #include <algorithm>
 
-#include "esp_log.h"
-#include "esp_netif.h"
-#include "esp_wifi.h"
-#include "esp_now.h"
-#include "esp_system.h"
-#include "nvs_flash.h"
+#include <esp_log.h>
+#include <esp_netif.h>
+#include <esp_wifi.h>
+#include <esp_now.h>
+#include <esp_system.h>
+#include <nvs_flash.h>
 #ifndef CONFIG_IDF_TARGET_ESP8266
-	#include "esp_mac.h"
+	#include <esp_mac.h>
+	#include <esp_random.h>
 #endif
 
 #include "cppcrc.h"
@@ -131,6 +132,14 @@ void EspNowEz::sendDiscovery(const uint8_t* mac) {
 	ESP_LOGI(TAG, "Discovery sent");
 }
 
+void EspNowEz::sendConfig(const uint8_t* mac, uint32_t old_seq) {
+	ConfigPayload payload;
+	payload.old_seq = old_seq;
+
+	this->sendMessage(&payload, mac);
+	if (this->is_debug) ESP_LOGD(TAG, "config sent");
+}
+
 void EspNowEz::sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac) {
 	auto payload = DataPayload{};
    memcpy(payload.data, data, size);
@@ -230,15 +239,13 @@ void EspNowEz::onReceive(const uint8_t *mac, const uint8_t *data, int len) {
 		if (!this->is_pair) return;
 
 		const DiscoveryPayload* discovery = reinterpret_cast<const DiscoveryPayload*>(payload);
-		if (!this->checkSize(discovery, len)) {
-			return;
-		}
+		if (!this->checkSize(discovery, len)) return;
+
 		ESP_LOGI(TAG, "Discovery received: %s", discovery->name);
 
 		uint8_t shared_secret[ECDH_SHARED_SECRET_SIZE];
-		if (!this->config->ecdh->generateSharedSecret(discovery->key, shared_secret)) {
-			return;
-		}
+		if (!this->config->ecdh->generateSharedSecret(discovery->key, shared_secret)) return;
+
 		if (this->config->is_server) {
 			this->addPeer(mac, shared_secret);
 		} else {
@@ -251,7 +258,15 @@ void EspNowEz::onReceive(const uint8_t *mac, const uint8_t *data, int len) {
 		return;
 	}
 
-	if (!this->checkSeq(mac, payload)) return;
+	if (payload->type == Payload::Type::CONFIG) {
+		const ConfigPayload* config = reinterpret_cast<const ConfigPayload*>(payload);
+		if (!this->checkConfig(mac, config)) return;
+	}
+
+	if (!this->checkSeq(mac, payload)) {
+		this->sendConfig(mac, payload->seq);
+		return;
+	}
 
 	if (payload->type == Payload::Type::DATA) {
 		const DataPayload* data = reinterpret_cast<const DataPayload*>(payload);
@@ -302,7 +317,25 @@ bool EspNowEz::checkSeq(const uint8_t *mac, const Payload* payload) {
 		return false;
 	}
 	peer->recv_seq++;
-	if (this->is_debug) ESP_LOGD(TAG, "seq OK");
+	if (this->is_debug) ESP_LOGD(TAG, "seq OK: %08" PRIx32, payload->seq);
+	return true;
+}
+
+bool EspNowEz::checkConfig(const uint8_t *mac, const ConfigPayload* config) {
+	Peer* peer = this->findPeer(mac);
+	if (!peer) {
+		if (this->is_debug) ESP_LOGD(TAG, "config NOK: peer not found");
+		return false;
+	}
+	if (config->old_seq != peer->send_seq) {
+		if (this->is_debug) ESP_LOGD(TAG, "config old_seq NOK: %08" PRIx32 "<>%08" PRIx32, config->old_seq, peer->send_seq);
+		return false;
+	}
+	if (this->is_debug) ESP_LOGD(TAG, "config OK");
+	if (config->seq != peer->send_seq) {
+		peer->send_seq = config->seq;
+		if (this->is_debug) ESP_LOGD(TAG, "seq=%08" PRIx32, peer->send_seq);
+	}
 	return true;
 }
 
@@ -331,4 +364,6 @@ EspNowEz::~EspNowEz() {
 
 EspNowEz::Peer::Peer(esp_now_peer_info peer_info) {
 	memcpy(this->mac, peer_info.peer_addr, sizeof(Peer::mac));
+	this->send_seq = esp_random();
+	this->recv_seq = esp_random();
 }

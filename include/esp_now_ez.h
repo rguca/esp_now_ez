@@ -35,6 +35,7 @@ public:
 	void sendMessage(T* data, const uint8_t* mac = nullptr);
 	void sendMessage(const uint8_t* data, uint8_t size, const uint8_t* mac = nullptr);
    void sendDiscovery(const uint8_t* mac = nullptr);
+	void sendConfig(const uint8_t* mac, uint32_t old_seq);
 	void onMessage(OnMessageCallback callback);
 	void addPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	void modifyPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
@@ -62,6 +63,7 @@ protected:
 	bool checkCrc(const Payload* payload, uint8_t size);
 	uint16_t calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes = 0);
 	bool checkSeq(const uint8_t *mac, const Payload* payload);
+	bool checkConfig(const uint8_t *mac, const ConfigPayload* config);
 	void logKey(const char* name, const uint8_t* key);
 };
 
