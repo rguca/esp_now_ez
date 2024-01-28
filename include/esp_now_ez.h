@@ -25,6 +25,7 @@ public:
 	typedef std::function<void(const uint8_t* data, size_t size)> OnMessageCallback;
 
 	const char* TAG = "espnowez";
+	const char* NVS_NAMESPACE = "espnowez";
    const uint8_t BROADCAST_MAC[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 	void setDebug(bool enable);
@@ -45,8 +46,6 @@ public:
 	~EspNowEz();
 
 protected:
-	#define DEBUG()
-
 	static EspNowEz* instance;
 
 	bool is_debug = false;
@@ -64,6 +63,8 @@ protected:
 	uint16_t calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes = 0);
 	bool checkSeq(const uint8_t *mac, const Payload* payload);
 	bool checkConfig(const uint8_t *mac, const ConfigPayload* config);
+	void loadPeers();
+	void persistPeer(const uint8_t* mac);
 	void logKey(const char* name, const uint8_t* key);
 };
 

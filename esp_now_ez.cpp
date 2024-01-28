@@ -95,6 +95,8 @@ void EspNowEz::init(Config* config) {
 			chip_id[0], chip_id[1], chip_id[2], chip_id[3], chip_id[4], chip_id[5]);
 	}
 	
+	this->loadPeers();
+
 	ESP_LOGI(TAG, "Initialized");
 }
 
@@ -104,7 +106,7 @@ void EspNowEz::startPair(uint16_t time_ms) {
 	}
 	ESP_LOGI(TAG, "Start pair");
 	this->is_pair = true;
-	if (this->config->is_server) {
+	if (!this->config->is_server) {
 		this->sendDiscovery();
 	}
 	if (time_ms == 0) {
@@ -159,7 +161,7 @@ void EspNowEz::send(Payload* payload, uint8_t size, const uint8_t* mac) {
 		mac = this->BROADCAST_MAC;
 
 	if (this->is_debug)
-		ESP_LOGD(TAG, "Send %uB to %02x:%02x:%02x:%02x:%02x:%02x", size, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		ESP_LOGD(TAG, "send %uB to %02x:%02x:%02x:%02x:%02x:%02x", size, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
 	if (!is_broadcast) {
 		Peer* peer = this->findPeer(mac);
@@ -208,21 +210,6 @@ void EspNowEz::modifyPeer(const uint8_t* mac, const uint8_t* lmk) {
 	ESP_ERROR_CHECK(esp_now_mod_peer(&peer));
 }
 
-std::vector<EspNowEz::Peer*> EspNowEz::getPeers() {
-	if (this->peers.size() > 0)
-		return this->peers;
-
-	esp_now_peer_info_t peer_info;
-	if (esp_now_fetch_peer(true, &peer_info) != ESP_OK) 
-		return this->peers;
-	
-	do {
-		this->peers.push_back(new Peer(peer_info));
-	} while (esp_now_fetch_peer(false, &peer_info) == ESP_OK);
-
-	return this->peers;
-}
-
 EspNowEz::Peer* EspNowEz::findPeer(const uint8_t* mac) {
 	for(auto it = this->peers.begin(); it != this->peers.end(); ++it) {
 		if (memcmp(mac, (*it)->mac, ESP_NOW_ETH_ALEN) != 0)
@@ -233,6 +220,56 @@ EspNowEz::Peer* EspNowEz::findPeer(const uint8_t* mac) {
 		return *this->peers.begin();
 	}
 	return nullptr;
+}
+
+std::vector<EspNowEz::Peer*> EspNowEz::getPeers() {
+	return this->peers;
+}
+
+void EspNowEz::loadPeers() {
+	if (this->is_debug) ESP_LOGD(TAG, "load peers");
+
+	nvs_handle_t nvs;
+	ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs));
+
+	nvs_iterator_t it = nullptr;
+	esp_err_t res = nvs_entry_find(NVS_DEFAULT_PART_NAME, NVS_NAMESPACE, NVS_TYPE_BLOB, &it);
+	while(res == ESP_OK) {
+		nvs_entry_info_t info;
+		nvs_entry_info(it, &info);
+
+		uint8_t mac[sizeof(esp_now_peer_info_t::peer_addr)];
+		for (int i=0; i<sizeof(mac); i++) {
+			char ch = info.key[i];
+			mac[i] = ch > 57 ? (ch - 87) : (ch - 48);
+		}
+
+		size_t size;
+		uint8_t lmk[sizeof(esp_now_peer_info_t::lmk)];
+		nvs_get_blob(nvs, info.key, lmk, &size);
+
+		this->addPeer(mac, lmk);
+		res = nvs_entry_next(&it);
+	}
+	nvs_release_iterator(it);
+}
+
+void EspNowEz::persistPeer(const uint8_t* mac) {
+	if (this->is_debug) ESP_LOGD(TAG, "persist peer");
+
+	esp_now_peer_info_t peer_info;
+	ESP_ERROR_CHECK(esp_now_get_peer(mac, &peer_info));
+	
+	nvs_handle_t nvs;
+	ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs));
+
+	uint8_t* m = peer_info.peer_addr;
+	char mac_string[sizeof(peer_info.peer_addr) * 2 + 1];
+	snprintf(mac_string, sizeof(mac_string), "%02x%02x%02x%02x%02x%02x", m[0], m[1], m[2], m[3], m[4], m[5]);
+
+	ESP_ERROR_CHECK(nvs_set_blob(nvs, mac_string, peer_info.lmk, sizeof(peer_info.lmk)));
+
+	nvs_commit(nvs);
 }
 
 void EspNowEz::onMessage(OnMessageCallback callback) {
@@ -258,13 +295,13 @@ void EspNowEz::onReceive(const uint8_t *mac, const uint8_t *data, int len) {
 		if (!this->config->ecdh->generateSharedSecret(discovery->key, shared_secret)) return;
 
 		if (this->config->is_server) {
-			this->addPeer(mac, shared_secret);
-		} else {
 			this->addPeer(mac);
 			this->sendDiscovery(mac);
 			this->modifyPeer(mac, shared_secret);
+		} else {
+			this->addPeer(mac, shared_secret);
 		}
-
+		this->persistPeer(mac);
 		this->stopPair();
 		return;
 	}
