@@ -64,7 +64,7 @@ protected:
 	bool checkSeq(const uint8_t *mac, const Payload* payload);
 	bool checkConfig(const uint8_t *mac, const ConfigPayload* config);
 	void loadPeers();
-	void persistPeer(const uint8_t* mac);
+	void persistPeer(const uint8_t* mac, const uint8_t* lmk);
 	void logKey(const char* name, const uint8_t* key);
 };
 
