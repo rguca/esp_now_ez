@@ -204,7 +204,13 @@ void EspNowEz::addPeer(const uint8_t* mac, const uint8_t* lmk) {
 		std::memcpy(peer_info.lmk, lmk, sizeof(ESP_NOW_KEY_LEN));
 		this->logKey("lmk", lmk);
 	}
-	ESP_ERROR_CHECK(esp_now_add_peer(&peer_info));
+
+	esp_err_t result = esp_now_add_peer(&peer_info);
+	if (result == ESP_ERR_ESPNOW_EXIST) {
+		this->modifyPeer(mac, lmk);
+		return;
+	}
+	ESP_ERROR_CHECK(result);
 
 	if (!this->isBroadcastMac(peer_info.peer_addr)) {
 		this->peers.push_back(new Peer(peer_info));
