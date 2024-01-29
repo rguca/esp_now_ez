@@ -20,6 +20,22 @@
 
 EspNowEz* EspNowEz::instance;
 
+#ifdef CONFIG_IDF_TARGET_ESP8266
+	static esp_err_t nvs_entry_find(const char *part_name, const char *namespace_name, nvs_type_t type, nvs_iterator_t* output_iterator) {
+		nvs_iterator_t it = nvs_entry_find(part_name, namespace_name, type);
+		if (it == nullptr) return ESP_ERR_NVS_NOT_FOUND;
+		*output_iterator = it;
+		return ESP_OK;
+	}
+
+	static esp_err_t nvs_entry_next(nvs_iterator_t *iterator) {
+		nvs_iterator_t it = nvs_entry_next(*iterator);
+		if (it == nullptr) return ESP_ERR_NVS_NOT_FOUND;
+		*iterator = it;
+		return ESP_OK;
+	}	
+#endif
+
 void EspNowEz::setDebug(bool enable) {
 	this->is_debug = enable;
 }
