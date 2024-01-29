@@ -188,6 +188,7 @@ void EspNowEz::send(Payload* payload, uint8_t size, const uint8_t* mac) {
 	}
 
 	payload->crc = this->calcCrc((uint8_t*) payload, size);
+	if (this->is_debug) ESP_LOGD(TAG, "crc=%04x", payload->crc);
 
 	ESP_ERROR_CHECK(esp_now_send(mac, (uint8_t*) payload, size));
 }
@@ -355,7 +356,7 @@ bool EspNowEz::checkCrc(const Payload* payload, uint8_t size) {
 		return false;
 	}
 
-	if (this->is_debug) ESP_LOGD(TAG, "crc OK");
+	if (this->is_debug) ESP_LOGD(TAG, "crc OK: %04x", payload->crc);
 	return true;
 }
 
@@ -369,7 +370,6 @@ uint16_t EspNowEz::calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes)
 	} else {
 		crc = CRC16::ARC::calc(data, size);
 	}
-	if (this->is_debug) ESP_LOGD(TAG, "crc=%04x", crc);
 	return crc;
 }
 
