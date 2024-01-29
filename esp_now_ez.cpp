@@ -45,11 +45,10 @@ void EspNowEz::init(Config* config) {
 		config = new Config;
 	}
 	this->config = config;
-
-	uint8_t chip_id[6];
-   ESP_ERROR_CHECK(esp_efuse_mac_get_default(chip_id));
-	esp_base_mac_addr_set(chip_id); // Without this, base mac is read multiple times from nvs
 	
+	ESP_ERROR_CHECK(esp_efuse_mac_get_default(this->mac));
+	esp_base_mac_addr_set(this->mac); // Without this, base mac is read multiple times from nvs
+
 	ESP_ERROR_CHECK(nvs_flash_init());
 
 	ESP_ERROR_CHECK(esp_netif_init());
@@ -99,18 +98,6 @@ void EspNowEz::init(Config* config) {
 		ESP_ERROR_CHECK(esp_now_set_pmk(this->config->pmk));
 	}
 
-	// Generate keys
-	if (config->ecdh == nullptr) {
-		config->ecdh = new Ecdh;
-		config->ecdh->generateKeypair();
-	}
-
-	if (config->name == nullptr) {
-		config->name = new char[sizeof(DiscoveryPayload::name)];
-		snprintf(config->name, sizeof(DiscoveryPayload::name), "%02x%02x%02x%02x%02x%02x", 
-			chip_id[0], chip_id[1], chip_id[2], chip_id[3], chip_id[4], chip_id[5]);
-	}
-	
 	this->loadPeers();
 
 	ESP_LOGI(TAG, "Initialized");
@@ -121,10 +108,19 @@ void EspNowEz::startPair(uint16_t time_ms) {
 		return;
 	}
 	ESP_LOGI(TAG, "Start pair");
+
+	// Generate keys
+	if (config->ecdh == nullptr) {
+		config->ecdh = new Ecdh;
+		config->ecdh->generateKeypair();
+		ESP_LOGD(TAG, "generated keys");
+	}
+
 	this->is_pair = true;
 	if (!this->config->is_server) {
 		this->sendDiscovery();
 	}
+
 	if (time_ms == 0) {
 		return;
 	}
@@ -142,6 +138,12 @@ void EspNowEz::stopPair() {
 
 void EspNowEz::sendDiscovery(const uint8_t* mac) {
 	ESP_LOGI(TAG, "Send discovery");
+	if (config->name == nullptr) {
+		config->name = new char[sizeof(DiscoveryPayload::name)];
+		snprintf(config->name, sizeof(DiscoveryPayload::name), "%02x%02x%02x%02x%02x%02x", 
+			this->mac[0], this->mac[1], this->mac[2], this->mac[3], this->mac[4], this->mac[5]);
+	}
+
 	DiscoveryPayload discovery;
 	std::strncpy(discovery.name, this->config->name, sizeof(discovery.name));
 	discovery.name[sizeof(discovery.name) - 1] = '\0';

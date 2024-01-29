@@ -50,6 +50,7 @@ protected:
 
 	bool is_debug = false;
 	Config* config;
+	uint8_t mac[6];
 	bool is_pair = false;
 	std::vector<Peer*> peers;
 	OnMessageCallback on_message_callback;
