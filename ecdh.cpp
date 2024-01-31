@@ -8,8 +8,6 @@
 	#include <esp_random.h>
 	#define MBEDTLS_ALLOW_PRIVATE_ACCESS
 #endif
-#include <mbedtls/entropy.h>
-#include <mbedtls/ctr_drbg.h>
 #include <mbedtls/md5.h>
 #include <mbedtls/platform_util.h>
 
