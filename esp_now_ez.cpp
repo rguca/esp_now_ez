@@ -113,7 +113,7 @@ void EspNowEz::startPair(uint16_t time_ms) {
 	if (config->ecdh == nullptr) {
 		config->ecdh = new Ecdh;
 		config->ecdh->generateKeypair();
-		ESP_LOGD(TAG, "generated keys");
+		if (this->is_debug) ESP_LOGD(TAG, "generated keys");
 	}
 
 	this->is_pair = true;
@@ -235,6 +235,28 @@ void EspNowEz::modifyPeer(const uint8_t* mac, const uint8_t* lmk) {
 	ESP_ERROR_CHECK(esp_now_mod_peer(&peer));
 }
 
+bool EspNowEz::removePeer(const uint8_t* mac) {
+	ESP_LOGI(TAG, "Remove peer: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+	for(auto it = this->peers.begin(); it != this->peers.end(); ++it) {
+		if (memcmp(mac, (*it)->mac, ESP_NOW_ETH_ALEN) != 0)
+			continue;
+		this->peers.erase(it);
+		ESP_ERROR_CHECK(esp_now_del_peer(mac));
+
+		nvs_handle_t nvs;
+		ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs));
+		char mac_string[ESP_NOW_ETH_ALEN * 2 + 1];
+		snprintf(mac_string, sizeof(mac_string), "%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		nvs_erase_key(nvs, mac_string);
+		ESP_ERROR_CHECK(nvs_commit(nvs));
+		return true;
+	}
+
+	ESP_LOGE(TAG, "Peer not found");
+	return false;
+}
+
 EspNowEz::Peer* EspNowEz::findPeer(const uint8_t* mac) {
 	for(auto it = this->peers.begin(); it != this->peers.end(); ++it) {
 		if (memcmp(mac, (*it)->mac, ESP_NOW_ETH_ALEN) != 0)
@@ -291,7 +313,7 @@ void EspNowEz::persistPeer(const uint8_t* mac, const uint8_t* lmk) {
 	snprintf(mac_string, sizeof(mac_string), "%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
 	ESP_ERROR_CHECK(nvs_set_blob(nvs, mac_string, lmk, ESP_NOW_KEY_LEN));
-	nvs_commit(nvs);
+	ESP_ERROR_CHECK(nvs_commit(nvs));
 }
 
 void EspNowEz::onMessage(OnMessageCallback callback) {

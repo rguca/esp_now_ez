@@ -40,6 +40,7 @@ public:
 	void onMessage(OnMessageCallback callback);
 	void addPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
 	void modifyPeer(const uint8_t* mac, const uint8_t* lmk = nullptr);
+	bool removePeer(const uint8_t* mac);
 	Peer* findPeer(const uint8_t* mac);
 	std::vector<Peer*> getPeers();
 	bool isBroadcastMac(const uint8_t* mac);
