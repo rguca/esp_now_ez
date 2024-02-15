@@ -28,7 +28,6 @@ public:
 	const char* NVS_NAMESPACE = "espnowez";
    const uint8_t BROADCAST_MAC[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-	void setDebug(bool enable);
    void init(Config* config = nullptr);
 	void startPair(uint16_t time_ms = 0);
 	void stopPair();
@@ -49,7 +48,6 @@ public:
 protected:
 	static EspNowEz* instance;
 
-	bool is_debug = false;
 	Config* config;
 	uint8_t mac[6];
 	bool is_pair = false;
@@ -67,7 +65,6 @@ protected:
 	bool checkConfig(const uint8_t *mac, const ConfigPayload* config);
 	void loadPeers();
 	void persistPeer(const uint8_t* mac, const uint8_t* lmk);
-	void logKey(const char* name, const uint8_t* key);
 };
 
 #include "esp_now_ez.tpp"
