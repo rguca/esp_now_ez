@@ -394,10 +394,10 @@ uint16_t EspNowEz::calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes)
 	if (pad_bytes) {
 		uint8_t padding[pad_bytes];
 		memset(padding, 0, pad_bytes);
-		crc = crc16_le(0, padding, pad_bytes);
-		crc = crc16_le(crc, data, size);
+		crc = esp_crc16_le(0, padding, pad_bytes);
+		crc = esp_crc16_le(crc, data, size);
 	} else {
-		crc = crc16_le(0, data, size);
+		crc = esp_crc16_le(0, data, size);
 	}
 	return crc;
 }
