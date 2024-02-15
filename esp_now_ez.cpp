@@ -46,7 +46,11 @@ EspNowEz* EspNowEz::instance;
 		if (it == nullptr) return ESP_ERR_NVS_NOT_FOUND;
 		*iterator = it;
 		return ESP_OK;
-	}	
+	}
+
+	static uint16_t esp_crc16_le(uint16_t crc, uint8_t const *buf, uint32_t len) {
+		return crc16_le(crc, buf, len);
+	}
 #endif
 
 void EspNowEz::init(Config* config) {
