@@ -1,15 +1,15 @@
 #include <cstring>
 #include <sdkconfig.h>
 #include <stdlib.h>
+
 #include <esp_log.h>
-#ifdef CONFIG_IDF_TARGET_ESP8266
-	#include <esp_system.h>
-#else
+#include <esp_system.h>
+#include <mbedtls/md5.h>
+#include <mbedtls/platform_util.h>
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
 	#include <esp_random.h>
 	#define MBEDTLS_ALLOW_PRIVATE_ACCESS
 #endif
-#include <mbedtls/md5.h>
-#include <mbedtls/platform_util.h>
 
 #include "ecdh.h"
 

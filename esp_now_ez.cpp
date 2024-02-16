@@ -10,7 +10,7 @@
 #include <esp_system.h>
 #include <nvs_flash.h>
 #include <esp_crc.h>
-#ifndef CONFIG_IDF_TARGET_ESP8266
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
 	#include <esp_mac.h>
 	#include <esp_random.h>
 #endif
@@ -20,9 +20,9 @@
 
 EspNowEz* EspNowEz::instance;
 
-#ifdef DEBUG
+#ifdef ESP_NOW_EZ_DEBUG
 	#define LOG_DEBUG(...)  \
-		if (this->is_debug) ESP_LOGD(TAG, __VA_ARGS__);
+		ESP_LOGD(TAG, __VA_ARGS__);
 
 	#define LOG_DEBUG_KEY(name, key) \
 		const uint8_t* k = key; \
@@ -33,7 +33,7 @@ EspNowEz* EspNowEz::instance;
 	#define LOG_DEBUG_KEY(name, key)
 #endif
 
-#ifdef CONFIG_IDF_TARGET_ESP8266
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(4, 4, 0)
 	static esp_err_t nvs_entry_find(const char *part_name, const char *namespace_name, nvs_type_t type, nvs_iterator_t* output_iterator) {
 		nvs_iterator_t it = nvs_entry_find(part_name, namespace_name, type);
 		if (it == nullptr) return ESP_ERR_NVS_NOT_FOUND;
@@ -88,13 +88,13 @@ void EspNowEz::init(Config* config) {
 
 	ESP_ERROR_CHECK(esp_now_init());
 	this->instance = this;
-	#ifdef CONFIG_IDF_TARGET_ESP8266
-		ESP_ERROR_CHECK(esp_now_register_recv_cb([](const uint8_t* mac, const uint8_t *data, int len) {
-			EspNowEz::instance->onReceive(mac, data, len);
-		}));
-	#else
+	#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
 		ESP_ERROR_CHECK(esp_now_register_recv_cb([](const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
 			EspNowEz::instance->onReceive(recv_info->src_addr, data, len);
+		}));
+	#else
+		ESP_ERROR_CHECK(esp_now_register_recv_cb([](const uint8_t* mac, const uint8_t *data, int len) {
+			EspNowEz::instance->onReceive(mac, data, len);
 		}));
 	#endif
 	ESP_ERROR_CHECK(esp_now_register_send_cb([](const uint8_t *mac_addr, esp_now_send_status_t status) {
