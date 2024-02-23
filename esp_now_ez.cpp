@@ -18,19 +18,6 @@
 #include "ecdh.h"
 #include "esp_now_ez.h"
 
-#ifdef ESP_NOW_EZ_DEBUG
-	#define LOG_DEBUG(...)  \
-		ESP_LOGD(EspNowEz::TAG, __VA_ARGS__);
-
-	#define LOG_DEBUG_KEY(name, key) \
-		const uint8_t* k = key; \
-		ESP_LOGD(EspNowEz::TAG, "%s=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", \
-				name, k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15]);
-#else
-	#define LOG_DEBUG(...)
-	#define LOG_DEBUG_KEY(name, key)
-#endif
-
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(4, 4, 0)
 	esp_err_t nvs_entry_find(const char *part_name, const char *namespace_name, nvs_type_t type, nvs_iterator_t* output_iterator) {
 		nvs_iterator_t it = nvs_entry_find(part_name, namespace_name, type);
@@ -53,21 +40,34 @@
 
 namespace EspNowEz {
 
+#ifdef ESP_NOW_EZ_DEBUG
+	#define LOG_DEBUG(...)  \
+		ESP_LOGD(TAG, __VA_ARGS__);
+
+	#define LOG_DEBUG_KEY(name, key) \
+		const uint8_t* k = key; \
+		ESP_LOGD(TAG, "%s=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", \
+				name, k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15]);
+#else
+	#define LOG_DEBUG(...)
+	#define LOG_DEBUG_KEY(name, key)
+#endif
+
 namespace {
-	EspNowEz::Config* config = nullptr;
+	Config* config = nullptr;
 	bool is_pair = false;
-	std::vector<EspNowEz::Peer*> peers;
-	EspNowEz::OnMessageCallback on_message_callback;
+	std::vector<Peer*> peers;
+	OnMessageCallback on_message_callback;
 
 	static void initWifi();
-	void send(Payload* payload, uint8_t size, EspNowEz::Peer* peer = nullptr);
+	void send(Payload* payload, uint8_t size, Peer* peer = nullptr);
 	void loadPeers();
 	void persistPeer(const uint8_t* mac, const uint8_t* lmk);
 	void onReceive(const uint8_t *mac, const uint8_t *data, int len);
 	void onSent(const uint8_t* mac_addr, esp_now_send_status_t status);
 	bool checkCrc(const Payload* payload, uint8_t size);
-	bool checkConfig(EspNowEz::Peer* peer, const ConfigPayload* config);
-	bool checkSeq(EspNowEz::Peer* peer, const Payload* payload);
+	bool checkConfig(Peer* peer, const ConfigPayload* config);
+	bool checkSeq(Peer* peer, const Payload* payload);
 	bool isBroadcastMac(const uint8_t* mac);
 	uint16_t calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes = 0);
 }
@@ -177,7 +177,7 @@ void onMessage(OnMessageCallback callback) {
 	on_message_callback = callback;
 }
 
-std::vector<EspNowEz::Peer*> getPeers() {
+std::vector<Peer*> getPeers() {
 	return peers;
 }
 
@@ -193,7 +193,7 @@ Peer* findPeer(const uint8_t* mac) {
 	return nullptr;
 }
 
-EspNowEz::Peer* addPeer(const uint8_t* mac, const uint8_t* lmk) {
+Peer* addPeer(const uint8_t* mac, const uint8_t* lmk) {
 	ESP_LOGI(TAG, "Add peer: %02x:%02x:%02x:%02x:%02x:%02x",	mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	esp_now_peer_info_t peer_info;
 	memset(&peer_info, 0, sizeof(esp_now_peer_info_t));
@@ -254,7 +254,7 @@ bool removePeer(const uint8_t* mac) {
 
 void deinit() {
 	ESP_ERROR_CHECK(esp_now_deinit());
-	for(EspNowEz::Peer* peer : peers) {
+	for(Peer* peer : peers) {
 		delete peer;
 	}
 	peers.clear();
@@ -315,11 +315,11 @@ void initWifi() {
 	}
 }
 
-void send(Payload* payload, uint8_t size, EspNowEz::Peer* peer) {
+void send(Payload* payload, uint8_t size, Peer* peer) {
 	bool is_broadcast = peer == nullptr;
 	const uint8_t* mac;
 	if (is_broadcast) {
-		mac = EspNowEz::BROADCAST_MAC;
+		mac = BROADCAST_MAC;
 	}
 
 	LOG_DEBUG("send %uB to %02x:%02x:%02x:%02x:%02x:%02x", size, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -339,10 +339,10 @@ void loadPeers() {
 	LOG_DEBUG("load peers");
 
 	nvs_handle_t nvs;
-	ESP_ERROR_CHECK(nvs_open(EspNowEz::NVS_NAMESPACE, NVS_READWRITE, &nvs));
+	ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs));
 
 	nvs_iterator_t it = nullptr;
-	esp_err_t res = nvs_entry_find(NVS_DEFAULT_PART_NAME, EspNowEz::NVS_NAMESPACE, NVS_TYPE_BLOB, &it);
+	esp_err_t res = nvs_entry_find(NVS_DEFAULT_PART_NAME, NVS_NAMESPACE, NVS_TYPE_BLOB, &it);
 	while(res == ESP_OK) {
 		nvs_entry_info_t info;
 		nvs_entry_info(it, &info);
@@ -359,7 +359,7 @@ void loadPeers() {
 		uint8_t lmk[size];
 		ESP_ERROR_CHECK(nvs_get_blob(nvs, info.key, lmk, &size));
 
-		EspNowEz::addPeer(mac, lmk);
+		addPeer(mac, lmk);
 		res = nvs_entry_next(&it);
 	}
 	nvs_release_iterator(it);
@@ -369,7 +369,7 @@ void persistPeer(const uint8_t* mac, const uint8_t* lmk) {
 	LOG_DEBUG("persist peer");
 	
 	nvs_handle_t nvs;
-	ESP_ERROR_CHECK(nvs_open(EspNowEz::NVS_NAMESPACE, NVS_READWRITE, &nvs));
+	ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs));
 
 	char mac_string[ESP_NOW_ETH_ALEN * 2 + 1];
 	snprintf(mac_string, sizeof(mac_string), "%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -450,7 +450,7 @@ bool checkCrc(const Payload* payload, uint8_t size) {
 	return true;
 }
 
-bool checkConfig(EspNowEz::Peer* peer, const ConfigPayload* config) {
+bool checkConfig(Peer* peer, const ConfigPayload* config) {
 	if (config->old_seq != peer->send_seq) {
 		LOG_DEBUG("config old_seq NOK: %08" PRIx32 "<>%08" PRIx32, config->old_seq, peer->send_seq);
 		return false;
@@ -463,7 +463,7 @@ bool checkConfig(EspNowEz::Peer* peer, const ConfigPayload* config) {
 	return true;
 }
 
-bool checkSeq(EspNowEz::Peer* peer, const Payload* payload) {
+bool checkSeq(Peer* peer, const Payload* payload) {
 	if (payload->seq != (peer->recv_seq + 1)) {
 		LOG_DEBUG("seq NOK: %08" PRIx32 "<>%08" PRIx32, payload->seq, (peer->recv_seq + 1));
 		return false;
@@ -474,7 +474,7 @@ bool checkSeq(EspNowEz::Peer* peer, const Payload* payload) {
 }
 
 bool isBroadcastMac(const uint8_t* mac) {
-	return memcmp(mac, EspNowEz::BROADCAST_MAC, ESP_NOW_ETH_ALEN) == 0;
+	return memcmp(mac, BROADCAST_MAC, ESP_NOW_ETH_ALEN) == 0;
 }
 
 uint16_t calcCrc(const uint8_t* data, uint8_t size, uint8_t pad_bytes) {
