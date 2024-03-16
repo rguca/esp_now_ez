@@ -274,37 +274,34 @@ Peer::Peer(esp_now_peer_info peer_info) {
 
 namespace {
 void initWifi() {
-	wifi_mode_t mode;
-	if (esp_wifi_get_mode(&mode) == ESP_ERR_WIFI_NOT_INIT) {
-		// Without this, base mac is read multiple times from nvs (saves 30ms)
-		uint8_t mac[6];
-		esp_err_t result = esp_base_mac_addr_get(mac);
-		if (result == ESP_ERR_INVALID_MAC) {
-			ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
-			esp_base_mac_addr_set(mac); 
-		}
-
-		ESP_ERROR_CHECK(nvs_flash_init());
-		ESP_ERROR_CHECK(esp_netif_init());
-
-		result = esp_event_loop_create_default();
-		if (result != ESP_OK && result != ESP_ERR_INVALID_STATE ) { // ESP_ERR_INVALID_STATE if loop already created
-			ESP_ERROR_CHECK(result);
-		}
-
-		wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-		cfg.nvs_enable = 0;
-		ESP_ERROR_CHECK(esp_wifi_init(&cfg) );
-		ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-		ESP_ERROR_CHECK(esp_wifi_start());
-
-		#ifdef CONFIG_IDF_TARGET_ESP8266
-			ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N));
-		#else
-			// Enable long range
-			ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR));
-		#endif
+	// Without this, base mac is read multiple times from nvs (saves 30ms)
+	uint8_t mac[6];
+	esp_err_t result = esp_base_mac_addr_get(mac);
+	if (result == ESP_ERR_INVALID_MAC) {
+		ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
+		esp_base_mac_addr_set(mac); 
 	}
+
+	ESP_ERROR_CHECK(nvs_flash_init());
+	ESP_ERROR_CHECK(esp_netif_init());
+
+	result = esp_event_loop_create_default();
+	if (result != ESP_OK && result != ESP_ERR_INVALID_STATE ) { // ESP_ERR_INVALID_STATE if loop already created
+		ESP_ERROR_CHECK(result);
+	}
+
+	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+	cfg.nvs_enable = 0;
+	ESP_ERROR_CHECK(esp_wifi_init(&cfg) );
+	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+	ESP_ERROR_CHECK(esp_wifi_start());
+
+	#ifdef CONFIG_IDF_TARGET_ESP8266
+		ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N));
+	#else
+		// Enable long range
+		ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR));
+	#endif
 
 	uint8_t primary_channel;
 	wifi_second_chan_t secondary_channel;
