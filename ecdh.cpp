@@ -4,12 +4,14 @@
 
 #include <esp_log.h>
 #include <esp_system.h>
-#include <mbedtls/md5.h>
-#include <mbedtls/platform_util.h>
+
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
 	#include <esp_random.h>
 	#define MBEDTLS_ALLOW_PRIVATE_ACCESS
 #endif
+
+#include <mbedtls/md5.h>
+#include <mbedtls/platform_util.h>
 
 #include "ecdh.h"
 
